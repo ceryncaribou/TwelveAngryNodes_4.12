@@ -17,3 +17,4 @@ Content/StaticMeshes/TileFeatures/Trees/*.uasset filter=lfs diff=lfs merge=lfs -
 Content/Textures/Coasts/*.uasset filter=lfs diff=lfs merge=lfs -text
 Content/Textures/Ressources/*.uasset filter=lfs diff=lfs merge=lfs -text
 Content/Textures/Ressources/Trees/*.uasset filter=lfs diff=lfs merge=lfs -text
+Content/UMG/UnitOrders/*.uasset filter=lfs diff=lfs merge=lfs -text
