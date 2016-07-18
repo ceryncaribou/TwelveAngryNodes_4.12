@@ -4,3 +4,4 @@ Content/Blueprints/*.uasset filter=lfs diff=lfs merge=lfs -text
 Content/Materials/*.uasset filter=lfs diff=lfs merge=lfs -text
 Content/SkeletalMeshes/*.uasset filter=lfs diff=lfs merge=lfs -text
 Content/StaticMeshes/*.uasset filter=lfs diff=lfs merge=lfs -text
+Content/Textures/*.uasset filter=lfs diff=lfs merge=lfs -text
