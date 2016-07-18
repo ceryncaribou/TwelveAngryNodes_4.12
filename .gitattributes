@@ -10,3 +10,7 @@ Content/Materials/CoastMaterials/*.uasset filter=lfs diff=lfs merge=lfs -text
 Content/Materials/ColorOnlyMaterials/*.uasset filter=lfs diff=lfs merge=lfs -text
 Content/Materials/Ressources/*.uasset filter=lfs diff=lfs merge=lfs -text
 Content/Materials/Ui/*.uasset filter=lfs diff=lfs merge=lfs -text
+Content/StaticMeshes/TileFeatures/*.uasset
+ filter=lfs diff=lfs merge=lfs -text
+Content/StaticMeshes/TileFeatures/Farms/*.uasset filter=lfs diff=lfs merge=lfs -text
+Content/StaticMeshes/TileFeatures/Trees/*.uasset filter=lfs diff=lfs merge=lfs -text
