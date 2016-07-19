@@ -1,0 +1,7 @@
+TwelveAngryNodes Project (temporary name)
+
+INSTALL
+-------
+TwelveAngryNodes should run both on mac and PC, and possibly eventually on Linux. It is currently developed with Unreal Engine 4.12.5
+1-Open the .uproject file in unreal and rebuild project
+2-If necessary, go to Visual Studio or Xcode to compile directly from source; debug might be necessary
