@@ -3,6 +3,7 @@
 #pragma once
 
 #include "GameFramework/Actor.h"
+#include "C_HexTile.h"
 #include "C_MiniHex.generated.h"
 
 UCLASS()
@@ -35,5 +36,9 @@ public:
     //altitude of the minihex
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Position Variables", Meta=(ExposeOnSpawn=true))
     float altitude;
+    
+    //Terrain of that specific minihex
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Map Info Variables", Meta=(ExposeOnSpawn=true))
+    ETerrain terrain;
     
 };
