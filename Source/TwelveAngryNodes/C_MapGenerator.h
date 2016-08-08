@@ -85,7 +85,7 @@ public:
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Map Info", Meta=(ExposeOnSpawn=true))
     int32 mapsizey;
     
-    //Position of goldberg polyhedron pentes and hexes; size of pent arrays will always be 12, size of hex arrays will depend on the size of the map, and go as 10(x^2-1) where x is the number of hexes between pentes + 1
+    //Position of goldberg polyhedron pents and hexes; size of pent arrays will always be 12, size of hex arrays will depend on the size of the map, and go as 10(x^2-1) where x is the number of hexes between pents + 1
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Goldberg Info")
     TArray<float> xpent;
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Goldberg Info")
@@ -244,7 +244,7 @@ public:
     UFUNCTION(BluePrintCallable, Category="Map Generation Functions")
     void InitializeGameManager();
     
-    //Goldberg polyhedron related functions
+    //Goldberg polyhedron related functions; numDivs is the number of hexes between pents
     UFUNCTION(BluePrintCallable, Category="Map Generation Functions")
     void GenerateGoldbergPolyhedron(int numDivs);
     

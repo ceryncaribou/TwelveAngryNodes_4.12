@@ -2539,14 +2539,10 @@ void AC_MapGenerator::InitializeGameManager() {
 
 
 void AC_MapGenerator::GenerateGoldbergPolyhedron(int numDivs) {
-    //initializing arrays of 3D positions for pentes and hexes
-    int32 mapsize=10*(numDivs*numDivs-1);
+    //initializing arrays of 3D positions for pents and hexes
     xpent.SetNum(12);
     ypent.SetNum(12);
     zpent.SetNum(12);
-    xhex.SetNum(mapsize);
-    yhex.SetNum(mapsize);
-    zhex.SetNum(mapsize);
     
     float tao = 1618.03398875;//golden mean * 1000
     float xinit[] = {1000., -1000., 1000., -1000., 0., 0., 0., 0., tao, -tao, tao, -tao};
@@ -2588,35 +2584,36 @@ void AC_MapGenerator::GenerateGoldbergPolyhedron(int numDivs) {
     //Interpolate all points within a face
     for(int i = 0; i<20; i++) {
         //Subdividing straight segments between pents
-        TArray<float> leftx, lefty, leftz, rightx, righty, rightz;
+        TArray<float> leftx, lefty, leftz, rightx, righty, rightz, facex, facey, facez;
         bool didLeft=false, didRight=false;
         const float ERROR = .00001;
-        for(int j = 0; j<numDivs; j++) {
+        for(int j = 1; j<numDivs; j++) {
             float curr=j/numDivs;
+            leftx.Push(faces[i].c1x * (1-curr) + faces[i].c2x * curr);
+            lefty.Push(faces[i].c1y * (1-curr) + faces[i].c2y * curr);
+            leftz.Push(faces[i].c1z * (1-curr) + faces[i].c2z * curr);
             if (!didLeft) {
-                leftx.Push(faces[i].c1x * (1-curr) + faces[i].c2x * curr);
-                leftx.Push(faces[i].c1x * (1-curr) + faces[i].c2x * curr);
-                leftx.Push(faces[i].c1x * (1-curr) + faces[i].c2x * curr);
                 for (int k = 0; k<xhex.Num()-1; k++) {//check if this segment was already in x-y-zhex; if so, won't add again
                     if ((xhex[k]-leftx.Last()<ERROR) && (yhex[k]-lefty.Last()<ERROR) && (zhex[k]-leftz.Last()<ERROR)) {
                         if (GEngine)
                         {
-                            GEngine->AddOnScreenDebugMessage(-1, 15.f, FColor::Yellow, TEXT("found a duplicate segment"));
+                            GEngine->AddOnScreenDebugMessage(-1, 15.f, FColor::Yellow, TEXT("found a duplicate segment left"));
                         }
                         didLeft=true;
                         break;
                     }
                 }
             }
+            
+            rightx.Push(faces[i].c1x * (1-curr) + faces[i].c3x * curr);
+            righty.Push(faces[i].c1y * (1-curr) + faces[i].c3y * curr);
+            rightz.Push(faces[i].c1z * (1-curr) + faces[i].c3z * curr);
             if (!didRight) {
-                rightx.Push(faces[i].c1x * (1-curr) + faces[i].c2x * curr);
-                rightx.Push(faces[i].c1x * (1-curr) + faces[i].c2x * curr);
-                rightx.Push(faces[i].c1x * (1-curr) + faces[i].c2x * curr);
                 for (int k = 0; k<leftx.Num()-1; k++) {//check if this segment was already in x-y-zhex; if so, won't add again
                     if ((xhex[k]-rightx.Last()<ERROR) && (yhex[k]-righty.Last()<ERROR) && (zhex[k]-rightz.Last()<ERROR)) {
                         if (GEngine)
                         {
-                            GEngine->AddOnScreenDebugMessage(-1, 15.f, FColor::Yellow, TEXT("found a duplicate segment"));
+                            GEngine->AddOnScreenDebugMessage(-1, 15.f, FColor::Yellow, TEXT("found a duplicate segment right"));
                         }
                         didRight=true;
                         break;
@@ -2624,8 +2621,49 @@ void AC_MapGenerator::GenerateGoldbergPolyhedron(int numDivs) {
                 }
             }
         }
+        //push local segments to points creating hexasphere if not already in
+        if (!didLeft) {
+            xhex.Append(leftx);
+            yhex.Append(lefty);
+            zhex.Append(leftz);
+        }
+        if (!didRight) {
+            xhex.Append(rightx);
+            yhex.Append(righty);
+            zhex.Append(rightz);
+        }
         
-        //Segments are now known, we now subdivide space between segment elements
+        //Local segments are now known, we now subdivide space between segment elements and thus cover the surface of the face
+        for (int j=1; j<=numDivs; j++) {
+            for (int k=1; k<j; k++) {
+                float curr=k/j;
+                facex.Push(leftx[j-1] * (1-curr) + rightx[j-1] * curr);
+                facey.Push(lefty[j-1] * (1-curr) + righty[j-1] * curr);
+                facez.Push(leftz[j-1] * (1-curr) + rightz[j-1] * curr);
+            }
+        }
+        
+        //push face surface to points creating hexasphere
+        xhex.Append(facex);
+        yhex.Append(facey);
+        zhex.Append(facez);
+        //finished with this face, moving on to next face
+    }
+    
+    //all points of all faces are now into the x-y-zhex arrays; must now rescale to correct radius for hexes and pents
+    //calculate correct radius for numDivs
+    const float prefactor = 1.;
+    const float angle_pents = 1.10714871779406;
+    const float height_hex = 173.205080756888;
+    float radius = prefactor * height_hex * numDivs / angle_pents;
+    
+    //rescale to correct radius
+    for (int i=0; i<xhex.Num(); i++) {
+        float mag = sqrtf(xhex[i]*xhex[i] + yhex[i]*yhex[i] + zhex[i]*zhex[i]);
+        float scale = radius / mag;
+        xhex[i]=xhex[i]*scale;
+        yhex[i]=yhex[i]*scale;
+        zhex[i]=zhex[i]*scale;
     }
 }
 
