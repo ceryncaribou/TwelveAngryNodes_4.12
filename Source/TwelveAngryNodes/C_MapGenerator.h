@@ -21,6 +21,7 @@ struct WaterBody {
  };
  */
 
+
 struct RiverSegment {
     TArray<int32> LeftBank;
     TArray<int32> RightBank;
@@ -40,6 +41,32 @@ struct RiverSegment {
     }
 };
 
+struct point3 {
+    float x,y,z;//cartesian coordinates
+    
+    point3(float ix, float iy, float iz)
+        :   x(ix)
+        ,   y(iy)
+        ,   z(iz)
+    {   }
+};
+
+struct GoldbergFace {
+    float c1x, c1y, c1z, c2x, c2y, c2z, c3x, c3y, c3z;//corners of a triangular face
+    
+    GoldbergFace(float ic1x, float ic1y, float ic1z, float ic2x, float ic2y, float ic2z, float ic3x, float ic3y, float ic3z)
+        :   c1x(ic1x)
+        ,   c1y(ic1y)
+        ,   c1z(ic1z)
+        ,   c2x(ic2x)
+        ,   c2y(ic2y)
+        ,   c2z(ic2z)
+        ,   c3x(ic3x)
+        ,   c3y(ic3y)
+        ,   c3z(ic3z)
+    {   }
+};
+
 UCLASS()
 class TWELVEANGRYNODES_API AC_MapGenerator : public AActor
 {
@@ -57,6 +84,20 @@ public:
     //Map size in y
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Map Info", Meta=(ExposeOnSpawn=true))
     int32 mapsizey;
+    
+    //Position of goldberg polyhedron pentes and hexes; size of pent arrays will always be 12, size of hex arrays will depend on the size of the map, and go as 10(x^2-1) where x is the number of hexes between pentes + 1
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Goldberg Info")
+    TArray<float> xpent;
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Goldberg Info")
+    TArray<float> ypent;
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Goldberg Info")
+    TArray<float> zpent;
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Goldberg Info")
+    TArray<float> xhex;
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Goldberg Info")
+    TArray<float> yhex;
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Goldberg Info")
+    TArray<float> zhex;
     
     //Possible values : 0, 1, 2, 3. At the end of GenerateTerrainType(), all non zero values get a -1, so that possible values are 0, 1->0, 2->1, 3->2.
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Map Info")
@@ -203,6 +244,10 @@ public:
     UFUNCTION(BluePrintCallable, Category="Map Generation Functions")
     void InitializeGameManager();
     
+    //Goldberg polyhedron related functions
+    UFUNCTION(BluePrintCallable, Category="Map Generation Functions")
+    void GenerateGoldbergPolyhedron(int numDivs);
+    
     //River utility functions to access what is inside the "Rivers" array
     UFUNCTION(BluePrintCallable, Category="River Utility Functions")
     int32 getTotalNumberOfRiverSegments();
@@ -247,5 +292,3 @@ public:
     int32 getPlainWeight(int32 latitude);
     int32 getGrassWeight(int32 latitude);
 };
-
-

@@ -2538,6 +2538,103 @@ void AC_MapGenerator::InitializeGameManager() {
 
 
 
+void AC_MapGenerator::GenerateGoldbergPolyhedron(int numDivs) {
+    //initializing arrays of 3D positions for pentes and hexes
+    int32 mapsize=10*(numDivs*numDivs-1);
+    xpent.SetNum(12);
+    ypent.SetNum(12);
+    zpent.SetNum(12);
+    xhex.SetNum(mapsize);
+    yhex.SetNum(mapsize);
+    zhex.SetNum(mapsize);
+    
+    float tao = 1618.03398875;//golden mean * 1000
+    float xinit[] = {1000., -1000., 1000., -1000., 0., 0., 0., 0., tao, -tao, tao, -tao};
+    float yinit[] = {tao, tao, -tao, -tao, 1000., -1000., 1000., -1000., 0., 0., 0., 0.};
+    float zinit[] = {0., 0., 0., 0., tao, tao, -tao, -tao, 1000., 1000., -1000., -1000.};
+    
+    xpent.Append(xinit, ARRAY_COUNT(xinit));
+    ypent.Append(yinit, ARRAY_COUNT(yinit));
+    zpent.Append(zinit, ARRAY_COUNT(zinit));
+    
+    /* INSERT ROTATION HERE SO THAT POLES ARE NODES
+    for(int i=0; i<12; i++) {
+        
+    }*/
+    
+    //Initializing faces of polyhedron with correct corners (the corners corresponding to the positions of the pentagons)
+    TArray<GoldbergFace> faces;
+    faces.Push(*new GoldbergFace(xpent[0], ypent[0], zpent[0], xpent[1], ypent[1], zpent[1], xpent[4], ypent[4], zpent[4]));
+    faces.Push(*new GoldbergFace(xpent[1], ypent[1], zpent[1], xpent[9], ypent[9], zpent[9], xpent[4], ypent[4], zpent[4]));
+    faces.Push(*new GoldbergFace(xpent[4], ypent[4], zpent[4], xpent[9], ypent[9], zpent[9], xpent[5], ypent[5], zpent[5]));
+    faces.Push(*new GoldbergFace(xpent[5], ypent[5], zpent[5], xpent[9], ypent[9], zpent[9], xpent[3], ypent[3], zpent[3]));
+    faces.Push(*new GoldbergFace(xpent[2], ypent[2], zpent[2], xpent[3], ypent[3], zpent[3], xpent[7], ypent[7], zpent[7]));
+    faces.Push(*new GoldbergFace(xpent[3], ypent[3], zpent[3], xpent[2], ypent[2], zpent[2], xpent[5], ypent[5], zpent[5]));
+    faces.Push(*new GoldbergFace(xpent[7], ypent[7], zpent[7], xpent[10], ypent[10], zpent[10], xpent[2], ypent[2], zpent[2]));
+    faces.Push(*new GoldbergFace(xpent[0], ypent[0], zpent[0], xpent[8], ypent[8], zpent[8], xpent[10], ypent[10], zpent[10]));
+    faces.Push(*new GoldbergFace(xpent[0], ypent[0], zpent[0], xpent[4], ypent[4], zpent[4], xpent[8], ypent[8], zpent[8]));
+    faces.Push(*new GoldbergFace(xpent[8], ypent[8], zpent[8], xpent[2], ypent[2], zpent[2], xpent[10], ypent[10], zpent[10]));
+    faces.Push(*new GoldbergFace(xpent[8], ypent[8], zpent[8], xpent[4], ypent[4], zpent[4], xpent[5], ypent[5], zpent[5]));
+    faces.Push(*new GoldbergFace(xpent[8], ypent[8], zpent[8], xpent[5], ypent[5], zpent[5], xpent[2], ypent[2], zpent[2]));
+    faces.Push(*new GoldbergFace(xpent[1], ypent[1], zpent[1], xpent[0], ypent[0], zpent[0], xpent[6], ypent[6], zpent[6]));
+    faces.Push(*new GoldbergFace(xpent[11], ypent[11], zpent[11], xpent[1], ypent[1], zpent[1], xpent[6], ypent[6], zpent[6]));
+    faces.Push(*new GoldbergFace(xpent[3], ypent[3], zpent[3], xpent[9], ypent[9], zpent[9], xpent[11], ypent[11], zpent[11]));
+    faces.Push(*new GoldbergFace(xpent[6], ypent[6], zpent[6], xpent[10], ypent[10], zpent[10], xpent[7], ypent[7], zpent[7]));
+    faces.Push(*new GoldbergFace(xpent[3], ypent[3], zpent[3], xpent[11], ypent[11], zpent[11], xpent[7], ypent[7], zpent[7]));
+    faces.Push(*new GoldbergFace(xpent[11], ypent[11], zpent[11], xpent[6], ypent[6], zpent[6], xpent[7], ypent[7], zpent[7]));
+    faces.Push(*new GoldbergFace(xpent[6], ypent[6], zpent[6], xpent[0], ypent[0], zpent[0], xpent[10], ypent[10], zpent[10]));
+    faces.Push(*new GoldbergFace(xpent[9], ypent[9], zpent[9], xpent[1], ypent[1], zpent[1], xpent[11], ypent[11], zpent[11]));
+    
+    //Interpolate all points within a face
+    for(int i = 0; i<20; i++) {
+        //Subdividing straight segments between pents
+        TArray<float> leftx, lefty, leftz, rightx, righty, rightz;
+        bool didLeft=false, didRight=false;
+        const float ERROR = .00001;
+        for(int j = 0; j<numDivs; j++) {
+            float curr=j/numDivs;
+            if (!didLeft) {
+                leftx.Push(faces[i].c1x * (1-curr) + faces[i].c2x * curr);
+                leftx.Push(faces[i].c1x * (1-curr) + faces[i].c2x * curr);
+                leftx.Push(faces[i].c1x * (1-curr) + faces[i].c2x * curr);
+                for (int k = 0; k<xhex.Num()-1; k++) {//check if this segment was already in x-y-zhex; if so, won't add again
+                    if ((xhex[k]-leftx.Last()<ERROR) && (yhex[k]-lefty.Last()<ERROR) && (zhex[k]-leftz.Last()<ERROR)) {
+                        if (GEngine)
+                        {
+                            GEngine->AddOnScreenDebugMessage(-1, 15.f, FColor::Yellow, TEXT("found a duplicate segment"));
+                        }
+                        didLeft=true;
+                        break;
+                    }
+                }
+            }
+            if (!didRight) {
+                rightx.Push(faces[i].c1x * (1-curr) + faces[i].c2x * curr);
+                rightx.Push(faces[i].c1x * (1-curr) + faces[i].c2x * curr);
+                rightx.Push(faces[i].c1x * (1-curr) + faces[i].c2x * curr);
+                for (int k = 0; k<leftx.Num()-1; k++) {//check if this segment was already in x-y-zhex; if so, won't add again
+                    if ((xhex[k]-rightx.Last()<ERROR) && (yhex[k]-righty.Last()<ERROR) && (zhex[k]-rightz.Last()<ERROR)) {
+                        if (GEngine)
+                        {
+                            GEngine->AddOnScreenDebugMessage(-1, 15.f, FColor::Yellow, TEXT("found a duplicate segment"));
+                        }
+                        didRight=true;
+                        break;
+                    }
+                }
+            }
+        }
+        
+        //Segments are now known, we now subdivide space between segment elements
+    }
+}
+
+
+
+
+
+
+
 
 
 
