@@ -246,7 +246,7 @@ public:
     
     //Goldberg polyhedron related functions; numDivs is the number of hexes between pents
     UFUNCTION(BluePrintCallable, Category="Map Generation Functions")
-    void GenerateGoldbergPolyhedron(int numDivs);
+    float GenerateGoldbergPolyhedron(int numDivs);
     
     //River utility functions to access what is inside the "Rivers" array
     UFUNCTION(BluePrintCallable, Category="River Utility Functions")
