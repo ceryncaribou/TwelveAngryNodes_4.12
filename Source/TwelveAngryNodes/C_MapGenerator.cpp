@@ -2503,7 +2503,7 @@ void AC_MapGenerator::GetStartingSpots() {
 
 void AC_MapGenerator::InitializeGameManager() {
     
-    manager->mapsizex=mapsizex;
+    /*manager->mapsizex=mapsizex;
     manager->mapsizey=mapsizey;
     
     manager->AltitudeMap=TArray<int32>(AltitudeMap);
@@ -2528,13 +2528,395 @@ void AC_MapGenerator::InitializeGameManager() {
     manager->CityDistricts=TArray<int32>(initialCityDistricts);
     
     manager->StartingSpots=TArray<int32>(StartingSpots);
-    
+    */
     manager->PrimaryHexArray=TArray<AC_HexTile*>(PrimaryHexArray);
-    manager->PositiveTwinHexArray=TArray<AC_HexTile*>(PositiveTwinHexArray);
-    manager->NegativeTwinHexArray=TArray<AC_HexTile*>(NegativeTwinHexArray);
-    manager->hasPositiveTwin=TArray<bool>(hasPositiveTwin);
-    manager->hasNegativeTwin=TArray<bool>(hasNegativeTwin);
+    //manager->PositiveTwinHexArray=TArray<AC_HexTile*>(PositiveTwinHexArray);
+    //manager->NegativeTwinHexArray=TArray<AC_HexTile*>(NegativeTwinHexArray);
+    //manager->hasPositiveTwin=TArray<bool>(hasPositiveTwin);
+    //manager->hasNegativeTwin=TArray<bool>(hasNegativeTwin);
 }
+
+void AC_MapGenerator::linkTiles(FGoldbergLink a, FGoldbergLink b) {
+    a.links.Push(b.identifier);
+    b.links.Push(a.identifier);
+}
+
+float AC_MapGenerator::GenerateGoldbergPolyhedron(int numDivs) {
+    //initializing arrays of 3D positions for pents
+    const float tao = 1618.03398875;//golden mean * 1000
+    
+    float xinit[] = {0., 0., -tao, -1000., 1000., tao, -1000., -tao, 0., tao, 1000., 0.};
+    float yinit[] = {1000., -1000., 0., tao, tao, 0., -tao, 0., 1000., 0., -tao, -1000.};
+    float zinit[] = {tao, tao, 1000., 0., 0., 1000., 0., -1000., -tao, -1000., 0., -tao};
+    
+    xpent.Append(xinit,12);
+    ypent.Append(yinit,12);
+    zpent.Append(zinit,12);
+    
+    //ROTATION SO THAT POLES ARE NODES 0 AND 11
+    const float theta = 0.55357436;//required rotation around x
+    for(int i=0; i<12; i++) {
+        float ytemp=ypent[i];//Necessary since ypent get modified before zpent
+        ypent[i]=ypent[i]*cosf(theta)-zpent[i]*sinf(theta);
+        zpent[i]=ytemp*sinf(theta)+zpent[i]*cosf(theta);
+    }
+    
+    //Initializing faces of polyhedron with correct corners (the corners corresponding to the positions of the pentagons)
+    TArray<GoldbergFace> faces;
+    faces.Push(GoldbergFace(xpent[0], ypent[0], zpent[0], xpent[1], ypent[1], zpent[1], xpent[2], ypent[2], zpent[2], 0, 1, 2));
+    faces.Push(GoldbergFace(xpent[0], ypent[0], zpent[0], xpent[2], ypent[2], zpent[2], xpent[3], ypent[3], zpent[3], 0, 2, 3));
+    faces.Push(GoldbergFace(xpent[0], ypent[0], zpent[0], xpent[3], ypent[3], zpent[3], xpent[4], ypent[4], zpent[4], 0, 3, 4));
+    faces.Push(GoldbergFace(xpent[0], ypent[0], zpent[0], xpent[4], ypent[4], zpent[4], xpent[5], ypent[5], zpent[5], 0, 4, 5));
+    faces.Push(GoldbergFace(xpent[0], ypent[0], zpent[0], xpent[5], ypent[5], zpent[5], xpent[1], ypent[1], zpent[1], 0, 5, 1));
+    faces.Push(GoldbergFace(xpent[1], ypent[1], zpent[1], xpent[6], ypent[6], zpent[6], xpent[2], ypent[2], zpent[2], 1, 6, 2));
+    faces.Push(GoldbergFace(xpent[2], ypent[2], zpent[2], xpent[7], ypent[7], zpent[7], xpent[3], ypent[3], zpent[3], 2, 7, 3));
+    faces.Push(GoldbergFace(xpent[3], ypent[3], zpent[3], xpent[8], ypent[8], zpent[8], xpent[4], ypent[4], zpent[4], 3, 8, 4));
+    faces.Push(GoldbergFace(xpent[4], ypent[4], zpent[4], xpent[9], ypent[9], zpent[9], xpent[5], ypent[5], zpent[5], 4, 9, 5));
+    faces.Push(GoldbergFace(xpent[5], ypent[5], zpent[5], xpent[10], ypent[10], zpent[10], xpent[1], ypent[1], zpent[1], 5, 10, 1));
+    faces.Push(GoldbergFace(xpent[6], ypent[6], zpent[6], xpent[2], ypent[2], zpent[2], xpent[7], ypent[7], zpent[7], 6, 2, 7));
+    faces.Push(GoldbergFace(xpent[7], ypent[7], zpent[7], xpent[3], ypent[3], zpent[3], xpent[8], ypent[8], zpent[8], 7, 3, 8));
+    faces.Push(GoldbergFace(xpent[8], ypent[8], zpent[8], xpent[4], ypent[4], zpent[4], xpent[9], ypent[9], zpent[9], 8, 4, 9));
+    faces.Push(GoldbergFace(xpent[9], ypent[9], zpent[9], xpent[5], ypent[5], zpent[5], xpent[10], ypent[10], zpent[10], 9, 5, 10));
+    faces.Push(GoldbergFace(xpent[10], ypent[10], zpent[10], xpent[1], ypent[1], zpent[1], xpent[6], ypent[6], zpent[6], 10, 1, 6));
+    faces.Push(GoldbergFace(xpent[11], ypent[11], zpent[11], xpent[6], ypent[6], zpent[6], xpent[7], ypent[7], zpent[7], 11, 6, 7));
+    faces.Push(GoldbergFace(xpent[11], ypent[11], zpent[11], xpent[7], ypent[7], zpent[7], xpent[8], ypent[8], zpent[8], 11, 7, 8));
+    faces.Push(GoldbergFace(xpent[11], ypent[11], zpent[11], xpent[8], ypent[8], zpent[8], xpent[9], ypent[9], zpent[9], 11, 8, 9));
+    faces.Push(GoldbergFace(xpent[11], ypent[11], zpent[11], xpent[9], ypent[9], zpent[9], xpent[10], ypent[10], zpent[10], 11, 9, 10));
+    faces.Push(GoldbergFace(xpent[11], ypent[11], zpent[11], xpent[10], ypent[10], zpent[10], xpent[6], ypent[6], zpent[6], 11, 10, 6));
+    
+    //initialize links for pents
+    for (int i=0; i<12; i++) {
+        pent_links.Push(FGoldbergLink(i));
+    }
+    
+    //Interpolate all points within a face
+    for(int i = 0; i<faces.Num(); i++) {
+        if (GEngine)
+        {
+            //GEngine->AddOnScreenDebugMessage(-1, 150.f, FColor::Yellow, FString::Printf(TEXT("Face %d with corners %f %f %f ; %f %f %f ; %f %f %f"), i, faces[i].c1x, faces[i].c1y, faces[i].c1z, faces[i].c2x, faces[i].c2y, faces[i].c2z, faces[i].c3x, faces[i].c3y, faces[i].c3z));
+        }
+        
+        //Subdividing straight segments between pents
+        TArray<float> leftx, lefty, leftz, rightx, righty, rightz, botx, boty, botz, facex, facey, facez;
+        TArray<int> memleft, memright, membot;//arrays used to keep in memory proper indices of hexes in segments for linking
+        bool didLeft=false, didRight=false, didBot=false;
+        const float max_err = .1;
+        
+        for(int j = 1; j<numDivs+1; j++) {
+            float curr=(float)j/ (float)(numDivs+1);
+            
+            //Left segment; between face corner 1 and 2
+            leftx.Push(faces[i].c1x * (1.-curr) + faces[i].c2x * curr);
+            lefty.Push(faces[i].c1y * (1.-curr) + faces[i].c2y * curr);
+            leftz.Push(faces[i].c1z * (1.-curr) + faces[i].c2z * curr);
+            for (int k = 0; k<xhex.Num(); k++) {//check if this segment was already in x-y-zhex; if so, won't add again
+                if ((fabsf(xhex[k]-leftx.Last())<max_err) && (fabsf(yhex[k]-lefty.Last())<max_err) && (fabsf(zhex[k]-leftz.Last())<max_err)) {
+                    if (GEngine)
+                    {
+                        //GEngine->AddOnScreenDebugMessage(-1, 15.f, FColor::Yellow, FString::Printf(TEXT("found a duplicate segment left %d %d %d %f %f %f %f %f %f"), i, j, k, xhex[k], leftx.Last(), yhex[k], lefty.Last(), zhex[k], leftz.Last()));
+                    }
+                    memleft.Push(k);
+                    didLeft=true;
+                }
+            }
+            //Right segment; between face corner 1 and 3
+            rightx.Push(faces[i].c1x * (1.-curr) + faces[i].c3x * curr);
+            righty.Push(faces[i].c1y * (1.-curr) + faces[i].c3y * curr);
+            rightz.Push(faces[i].c1z * (1.-curr) + faces[i].c3z * curr);
+            for (int k = 0; k<xhex.Num(); k++) {//check if this segment was already in x-y-zhex; if so, won't add again
+                if ((fabsf(xhex[k]-rightx.Last())<max_err) && (fabsf(yhex[k]-righty.Last())<max_err) && (fabsf(zhex[k]-rightz.Last())<max_err)) {
+                    if (GEngine)
+                    {
+                        //GEngine->AddOnScreenDebugMessage(-1, 15.f, FColor::Yellow, FString::Printf(TEXT("found a duplicate segment right %d %d %d %f %f"), i, j, k, xhex[k], rightx.Last()));
+                    }
+                    memright.Push(k);
+                    didRight=true;
+                }
+            }
+            
+            //Bot segment; between face corner 2 and 3
+            botx.Push(faces[i].c2x * (1.-curr) + faces[i].c3x * curr);
+            boty.Push(faces[i].c2y * (1.-curr) + faces[i].c3y * curr);
+            botz.Push(faces[i].c2z * (1.-curr) + faces[i].c3z * curr);
+            for (int k = 0; k<xhex.Num(); k++) {//check if this segment was already in x-y-zhex; if so, won't add again
+                if ((fabsf(xhex[k]-botx.Last())<max_err) && (fabsf(yhex[k]-boty.Last())<max_err) && (fabsf(zhex[k]-botz.Last())<max_err)) {
+                    if (GEngine)
+                    {
+                        //GEngine->AddOnScreenDebugMessage(-1, 15.f, FColor::Yellow, FString::Printf(TEXT("found a duplicate segment bot %d %d %d %f %f"), i, j, k, xhex[k], botx.Last()));
+                    }
+                    membot.Push(k);
+                    didBot=true;
+                }
+            }
+        }
+        
+        if (GEngine)
+        {
+            //GEngine->AddOnScreenDebugMessage(-1, 45.f, FColor::Yellow, FString::Printf(TEXT("face %d left : %f %f %f"), i, leftx[0], lefty[0], leftz[0]));
+        }
+        
+        if (GEngine)
+        {
+            //GEngine->AddOnScreenDebugMessage(-1, 45.f, FColor::Yellow, FString::Printf(TEXT("face %d left : %f %f %f"), i, leftx[12], lefty[12], leftz[12]));
+        }
+        
+        /********************************
+         * Starting linking; a link is a list of index references that a each tile has to know its neighbors if index is negative,
+         * neighbor is a pentagon of index 1 smaller than listed (so as not to have a double 0 case)
+         ********************************/
+        //push local segments to points creating hexasphere if not already in, and link up the hexes/pents in segments
+        if (!didLeft) {
+            xhex.Append(leftx);
+            yhex.Append(lefty);
+            zhex.Append(leftz);
+            
+            //Linking local yet undone left segment
+            for (int j = 0; j<leftx.Num(); j++) {
+                hex_links.Push(FGoldbergLink());
+                memleft.Push(hex_links.Num()-1);//For future reference when linking interior of faces
+                if (j==0) {
+                    hex_links.Last().links.Push(-(1+faces[i].c1));//Linking first of segment with pentagon
+                    pent_links[faces[i].c1].links.Push(hex_links.Num()-1);//Linking back
+                    if (didRight) {
+                        hex_links.Last().links.Push(memright[0]);//Linking corner 1 if right on another face
+                        hex_links[memright[0]].links.Push(hex_links.Num()-1);//Linking back
+                    }
+                }
+                else {
+                    hex_links.Last().links.Push(hex_links.Num()-2);//Linking with previous element of segment
+                    hex_links.Last(1).links.Push(hex_links.Num()-1);//Linking back
+                    if (j==(leftx.Num()-1)) {
+                        hex_links.Last().links.Push(-(1+faces[i].c2));//Linking last segment with pentagon at corner 2
+                        pent_links[faces[i].c2].links.Push(hex_links.Num()-1);//Linking back
+                        if (didBot) {
+                            hex_links.Last().links.Push(membot[0]);//Linking corner 2 if bot on another face
+                            hex_links[membot[0]].links.Push(hex_links.Num()-1);//Linking back
+                        }
+                    }
+                }
+            }
+        }
+        else if (didRight && didBot) {
+            hex_links[memleft[0]].links.Push(memright[0]);//Linking corner 1 if both segments on other faces
+            hex_links[memright[0]].links.Push(memleft[0]);//Linking back
+            hex_links[memleft.Last()].links.Push(membot[0]);//Linking corner 2 if both segments on other faces
+            hex_links[membot[0]].links.Push(memleft.Last());//Linking back
+        }
+        else if (didRight) {
+            hex_links[memleft[0]].links.Push(memright[0]);//Linking corner 1 if both segments on other faces
+            hex_links[memright[0]].links.Push(memleft[0]);//Linking back
+        }
+        else if (didBot) {
+            hex_links[memleft.Last()].links.Push(membot[0]);//Linking corner 2 if both segments on other faces
+            hex_links[membot[0]].links.Push(memleft.Last());//Linking back
+        }
+        
+        if (!didRight) {
+            xhex.Append(rightx);
+            yhex.Append(righty);
+            zhex.Append(rightz);
+            
+            //Linking local yet undone right segment (also with left)
+            for (int j = 0; j<rightx.Num(); j++) {
+                hex_links.Push(FGoldbergLink());
+                memright.Push(hex_links.Num()-1);//For future reference when linking interior of faces
+                if (j==0) {
+                    hex_links.Last().links.Push(-(1+faces[i].c1));//Linking first of segment with pentagon
+                    pent_links[faces[i].c1].links.Push(hex_links.Num()-1);//Linking back
+                    if (!didLeft) {
+                        hex_links.Last().links.Push(hex_links.Num()-leftx.Num()-1);//Linking corner 1 if both on this face
+                        hex_links[hex_links.Num()-leftx.Num()-1].links.Push(hex_links.Num()-1);//Linking back
+                    }
+                    else {
+                        hex_links.Last().links.Push(memleft[0]);//Linking corner 1 if left on another face
+                        hex_links[memleft[0]].links.Push(hex_links.Num()-1);//Linking back
+                    }
+                    
+                }
+                else {
+                    hex_links.Last().links.Push(hex_links.Num()-2);//Linking with previous element of segment
+                    hex_links.Last(1).links.Push(hex_links.Num()-1);//Linking back
+                    if (j==(rightx.Num()-1)) {
+                        hex_links.Last().links.Push(-(1+faces[i].c3));//Linking last segment with pentagon at corner 3
+                        pent_links[faces[i].c3].links.Push(hex_links.Num()-1);//Linking back
+                        if (didBot) {
+                            hex_links.Last().links.Push(membot.Last());//Linking corner 3 if bot on another face
+                            hex_links[membot.Last()].links.Push(hex_links.Num()-1);//Linking back
+                        }
+                    }
+                }
+            }
+        }
+        else if (didBot) {
+            hex_links[memright.Last()].links.Push(membot.Last());//Linking corner 3 if both segments on other faces
+            hex_links[membot.Last()].links.Push(memright.Last());//Linking back
+        }
+        
+        if (!didBot) {
+            xhex.Append(botx);
+            yhex.Append(boty);
+            zhex.Append(botz);
+            
+            //Linking local yet undone bot segment (also with left and right)
+            for (int j = 0; j<botx.Num(); j++) {
+                hex_links.Push(FGoldbergLink());
+                membot.Push(hex_links.Num()-1);//For future reference when linking interior of faces
+                if (j==0) {
+                    hex_links.Last().links.Push(-(1+faces[i].c2));//Linking first of segment with corner 2
+                    pent_links[faces[i].c2].links.Push(hex_links.Num()-1);//Linking back
+                    if (!didLeft) {
+                        hex_links.Last().links.Push(hex_links.Num()-rightx.Num()-2);//Linking corner 2 if both on this face
+                        hex_links[hex_links.Num()-rightx.Num()-2].links.Push(hex_links.Num()-1);//Linking back
+                    }
+                    else {
+                        hex_links.Last().links.Push(memleft.Last());//Linking corner 2 if left on another face
+                        hex_links[memleft.Last()].links.Push(hex_links.Num()-1);//Linking back
+                    }
+                }
+                else {
+                    hex_links.Last().links.Push(hex_links.Num()-2);//Linking with previous element of segment
+                    hex_links.Last(1).links.Push(hex_links.Num()-1);//Linking back
+                    if (j==(botx.Num()-1)) {
+                        hex_links.Last().links.Push(-(1+faces[i].c3));//Linking last segment with pentagon at corner 3
+                        pent_links[faces[i].c3].links.Push(hex_links.Num()-1);//Linking back
+                        if (!didRight) {
+                            hex_links.Last().links.Push(hex_links.Num()-botx.Num()-1);//Linking corner 3 if both on this face
+                            hex_links[hex_links.Num()-botx.Num()-1].links.Push(hex_links.Num()-1);//Linking back
+                        }
+                        else {
+                            hex_links.Last().links.Push(memright.Last());//Linking corner 3 if right on another face
+                            hex_links[memright.Last()].links.Push(hex_links.Num()-1);//Linking back
+                        }
+                    }
+                }
+            }
+        }
+        
+        if (i==0) {
+            for(int j = 0; j<hex_links.Num(); j++) {
+                int temp2 = -13, temp3 = -13;
+                if (hex_links[j].links.Num()==3) {
+                    temp2 = hex_links[j].links[2];
+                }
+                else if (hex_links[j].links.Num()==4) {
+                    temp2 = hex_links[j].links[2];
+                    temp3 = hex_links[j].links[3];
+                }
+                if (GEngine)
+                {
+                    GEngine->AddOnScreenDebugMessage(-1, 145.f, FColor::Yellow, FString::Printf(TEXT("Links on face %d: %d %d %d %d"), i, hex_links[j].links[0], hex_links[j].links[1], temp2, temp3));
+                }
+            }
+        }
+        
+        //Checking if correct number of tiles in clone segments before proceeding
+        if ((memleft.Num()!=leftx.Num()) || (memright.Num()!=rightx.Num()) || membot.Num()!=botx.Num()) {
+            if (GEngine)
+            {
+                GEngine->AddOnScreenDebugMessage(-1, 45.f, FColor::Yellow, FString::Printf(TEXT("Failed to properly link sphere; inconsistent number of tiles in segments on face %d : %d %d %d %d %d %d"), i, memleft.Num(), leftx.Num(), memright.Num(), rightx.Num(), membot.Num(), botx.Num()));
+            }
+        }
+        
+        //Local segments are now known, we now subdivide space between segment elements and thus cover the surface of the face
+        for (int j=1; j<numDivs+1; j++) {
+            for (int k=1; k<j; k++) {
+                float curr=(float)k / (float)(j);
+                facex.Push(leftx[j-1] * (1-curr) + rightx[j-1] * curr);
+                facey.Push(lefty[j-1] * (1-curr) + righty[j-1] * curr);
+                facez.Push(leftz[j-1] * (1-curr) + rightz[j-1] * curr);
+                
+                //Linking interior of face
+                hex_links.Push(FGoldbergLink());
+                if (k==1) {
+                    hex_links.Last().links.Push(memleft[j-1]);//Linking with left on segment
+                    hex_links[memleft[j-1]].links.Push(hex_links.Num()-1);//Linking back
+                    hex_links.Last().links.Push(memleft[j-2]);//linking with topleft on segment
+                    hex_links[memleft[j-2]].links.Push(hex_links.Num()-1);//Linking back
+                }
+                else {
+                    hex_links.Last().links.Push(hex_links.Num()-2);//Linking with left within face
+                    hex_links.Last(1).links.Push(hex_links.Num()-1);//Linking back
+                    hex_links.Last().links.Push(hex_links.Num()-j-1);//Linking with topleft within face
+                    hex_links.Last(j).links.Push(hex_links.Num()-1);//Linking back
+                }
+                if (k==(j-1)) {
+                    hex_links.Last().links.Push(memright[j-2]);//Linking with top right on segment
+                    hex_links[memright[j-2]].links.Push(hex_links.Num()-1);//Linking back
+                    hex_links.Last().links.Push(memright[j-1]);//Linking with right on segment
+                    hex_links[memright[j-1]].links.Push(hex_links.Num()-1);//Linking back
+                }
+                else {
+                    hex_links.Last().links.Push(hex_links.Num()-j);//Linking with topright within face
+                    hex_links.Last(j-1).links.Push(hex_links.Num()-1);//Linking back
+                }
+                if (j==numDivs) {
+                    hex_links.Last().links.Push(membot[k-1]);//Linking with botleft on segment
+                    hex_links[membot[k-1]].links.Push(hex_links.Num()-1);//Linking back
+                    hex_links.Last().links.Push(membot[k]);//Linking with botright on segment
+                    hex_links[membot[k]].links.Push(hex_links.Num()-1);//Linking back
+                }
+            }
+        }
+        
+        //push face surface to points creating hexasphere
+        xhex.Append(facex);
+        yhex.Append(facey);
+        zhex.Append(facez);
+        
+        //finished with this face, moving on to next face
+    }
+    
+    //Checking total number of links of hexagons
+    int nLinks=0;
+    for (int i=0; i<hex_links.Num(); i++) {
+        nLinks+=hex_links[i].links.Num();
+    }
+    if (GEngine) {
+            GEngine->AddOnScreenDebugMessage(-1, 145.f, FColor::Yellow, FString::Printf(TEXT("Number of hex links : %d"), nLinks));
+    }
+    
+    //Checking if all hexagons have 6 neighbors
+    for (int i=0; i<hex_links.Num(); i++) {
+        if (hex_links[i].links.Num() != 6) {
+            if (GEngine) {
+                GEngine->AddOnScreenDebugMessage(-1, 15.f, FColor::Yellow, FString::Printf(TEXT("Failed to properly link sphere; hexagon does not have 6 neighbors : %d"), i));
+                
+            }
+        }
+    }
+    
+    //Checking if all pentagons have 5 neighbors
+    for (int i=0; i<pent_links.Num(); i++) {
+        if (pent_links[i].links.Num() != 5) {
+            if (GEngine) {
+                    GEngine->AddOnScreenDebugMessage(-1, 15.f, FColor::Yellow, FString::Printf(TEXT("Failed to properly link sphere; pentagon does not have 5 neighbors : %d"), i));
+            
+            }
+        }
+    }
+    
+    //all points of all faces are now into the x-y-zhex arrays; must now rescale to correct radius for hexes and pents
+    //calculate correct radius for numDivs
+    const float prefactor = 1.;
+    const float angle_pents = 1.10714871779406;
+    const float height_hex = 173.205080756888;
+    float radius = prefactor * height_hex * numDivs / angle_pents;
+    
+    //rescale to correct radius
+    for (int i=0; i<xhex.Num(); i++) {
+        float mag = sqrtf(xhex[i]*xhex[i] + yhex[i]*yhex[i] + zhex[i]*zhex[i]);
+        float scale = radius / mag;
+        xhex[i]=xhex[i]*scale;
+        yhex[i]=yhex[i]*scale;
+        zhex[i]=zhex[i]*scale;
+    }
+    
+    return radius;
+}
+
+
+
+
 
 
 
