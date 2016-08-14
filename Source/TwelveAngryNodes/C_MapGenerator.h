@@ -21,13 +21,13 @@ struct WaterBody {
  };
  */
 
+
 struct RiverSegment {
     TArray<int32> LeftBank;
     TArray<int32> RightBank;
     TArray<int32> dir;//to go from left to right
     int32 length;
     int32 segAltitude;
-    
     int32 segStart;
     int32 segEnd;
     
@@ -37,6 +37,62 @@ struct RiverSegment {
         dir.Push(direction);
         segStart=start;
         length=1;
+    }
+};
+
+struct point3 {
+    float x,y,z;//cartesian coordinates
+    
+    point3(float ix, float iy, float iz)
+        :   x(ix)
+        ,   y(iy)
+        ,   z(iz)
+    {   }
+};
+
+struct GoldbergFace {
+    float c1x, c1y, c1z, c2x, c2y, c2z, c3x, c3y, c3z;//corners of a triangular face
+    int c1,c2,c3;//ref index of each corner
+    
+    GoldbergFace(float ic1x, float ic1y, float ic1z, float ic2x, float ic2y, float ic2z, float ic3x, float ic3y, float ic3z, int ic1, int ic2, int ic3)
+        :   c1x(ic1x)
+        ,   c1y(ic1y)
+        ,   c1z(ic1z)
+        ,   c2x(ic2x)
+        ,   c2y(ic2y)
+        ,   c2z(ic2z)
+        ,   c3x(ic3x)
+        ,   c3y(ic3y)
+        ,   c3z(ic3z)
+        ,   c1(ic1)
+        ,   c2(ic2)
+        ,   c3(ic3)
+    {   }
+};
+
+USTRUCT()
+struct FGoldbergLink {
+    GENERATED_BODY()
+    
+    UPROPERTY(EditAnywhere, BlueprintReadWrite)
+    TArray<int32> links;
+    
+    UPROPERTY(EditAnywhere, BlueprintReadWrite)
+    int32 identifier;
+    
+    FGoldbergLink() {
+        identifier=0;
+    }
+    
+    FGoldbergLink(int32 iid)
+        :   identifier(iid)
+    {   }
+    
+    bool isInLinks(int32 a) {
+        for (int i=0; i<links.Num(); i++) {
+            if (links[i] == a) return true;
+        }
+        return false;
     }
 };
 
@@ -57,6 +113,25 @@ public:
     //Map size in y
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Map Info", Meta=(ExposeOnSpawn=true))
     int32 mapsizey;
+    
+    //Position of goldberg polyhedron pents and hexes; size of pent arrays will always be 12, size of hex arrays will depend on the size of the map, and go as 10(x^2-1) where x is the number of hexes between pents + 1
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Goldberg Info")
+    TArray<float> xpent;
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Goldberg Info")
+    TArray<float> ypent;
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Goldberg Info")
+    TArray<float> zpent;
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Goldberg Info")
+    TArray<float> xhex;
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Goldberg Info")
+    TArray<float> yhex;
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Goldberg Info")
+    TArray<float> zhex;
+    
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Hex References")
+    TArray<FGoldbergLink > pent_links;
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Hex References")
+    TArray<FGoldbergLink > hex_links;
     
     //Possible values : 0, 1, 2, 3. At the end of GenerateTerrainType(), all non zero values get a -1, so that possible values are 0, 1->0, 2->1, 3->2.
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Map Info")
@@ -203,6 +278,13 @@ public:
     UFUNCTION(BluePrintCallable, Category="Map Generation Functions")
     void InitializeGameManager();
     
+    //Goldberg polyhedron related functions; numDivs is the number of hexes between pents. Method also calculates and stores arrays of information on tile neighbors
+    UFUNCTION(BluePrintCallable, Category="Map Generation Functions")
+    float GenerateGoldbergPolyhedron(int numDivs);
+    
+    //Utility funciton to remember correct neighbor information in tiles
+    void linkTiles(FGoldbergLink a, FGoldbergLink b);
+    
     //River utility functions to access what is inside the "Rivers" array
     UFUNCTION(BluePrintCallable, Category="River Utility Functions")
     int32 getTotalNumberOfRiverSegments();
@@ -247,5 +329,3 @@ public:
     int32 getPlainWeight(int32 latitude);
     int32 getGrassWeight(int32 latitude);
 };
-
-
