@@ -127,6 +127,8 @@ public:
     TArray<float> yhex;
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Goldberg Info")
     TArray<float> zhex;
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Goldberg Info")
+    TArray<float> scalefactor;
     
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Hex References")
     TArray<FGoldbergLink > pent_links;
@@ -278,13 +280,12 @@ public:
     UFUNCTION(BluePrintCallable, Category="Map Generation Functions")
     void InitializeGameManager();
     
-    //Goldberg polyhedron related functions; numDivs is the number of hexes between pents. Method also calculates and stores arrays of information on tile neighbors
+    //Goldberg polyhedron related functions; numDivs is the number of hexes between pents, radiusScaling is a float used to scaled the radius of the sphere (usually slightly larger than 1). Method also calculates and stores arrays of information on tile neighbors
     UFUNCTION(BluePrintCallable, Category="Map Generation Functions")
-    float GenerateGoldbergPolyhedron(int numDivs);
-    
-    //Utility funciton to remember correct neighbor information in tiles
-    void linkTiles(FGoldbergLink a, FGoldbergLink b);
-    
+    float GenerateGoldbergPolyhedron(int numDivs, float radiusScaling);
+    UFUNCTION(BluePrintCallable, Category="Map Generation Functions")
+    void OrderGoldbergLinking();
+        
     //River utility functions to access what is inside the "Rivers" array
     UFUNCTION(BluePrintCallable, Category="River Utility Functions")
     int32 getTotalNumberOfRiverSegments();

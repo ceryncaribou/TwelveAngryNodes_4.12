@@ -2536,12 +2536,7 @@ void AC_MapGenerator::InitializeGameManager() {
     //manager->hasNegativeTwin=TArray<bool>(hasNegativeTwin);
 }
 
-void AC_MapGenerator::linkTiles(FGoldbergLink a, FGoldbergLink b) {
-    a.links.Push(b.identifier);
-    b.links.Push(a.identifier);
-}
-
-float AC_MapGenerator::GenerateGoldbergPolyhedron(int numDivs) {
+float AC_MapGenerator::GenerateGoldbergPolyhedron(int numDivs, float radiusScaling) {
     //initializing arrays of 3D positions for pents
     const float tao = 1618.03398875;//golden mean * 1000
     
@@ -2765,8 +2760,14 @@ float AC_MapGenerator::GenerateGoldbergPolyhedron(int numDivs) {
                     hex_links.Last().links.Push(-(1+faces[i].c2));//Linking first of segment with corner 2
                     pent_links[faces[i].c2].links.Push(hex_links.Num()-1);//Linking back
                     if (!didLeft) {
-                        hex_links.Last().links.Push(hex_links.Num()-rightx.Num()-2);//Linking corner 2 if both on this face
-                        hex_links[hex_links.Num()-rightx.Num()-2].links.Push(hex_links.Num()-1);//Linking back
+                        if (!didRight) {
+                            hex_links.Last().links.Push(hex_links.Num()-rightx.Num()-2);//Linking corner 2 if both on this face with right
+                            hex_links[hex_links.Num()-rightx.Num()-2].links.Push(hex_links.Num()-1);//Linking back
+                        }
+                        else {
+                            hex_links.Last().links.Push(hex_links.Num()-2);//Linking corner 2 if both on this face without right
+                            hex_links.Last(1).links.Push(hex_links.Num()-1);//Linking back
+                        }
                     }
                     else {
                         hex_links.Last().links.Push(memleft.Last());//Linking corner 2 if left on another face
@@ -2788,23 +2789,6 @@ float AC_MapGenerator::GenerateGoldbergPolyhedron(int numDivs) {
                             hex_links[memright.Last()].links.Push(hex_links.Num()-1);//Linking back
                         }
                     }
-                }
-            }
-        }
-        
-        if (i==0) {
-            for(int j = 0; j<hex_links.Num(); j++) {
-                int temp2 = -13, temp3 = -13;
-                if (hex_links[j].links.Num()==3) {
-                    temp2 = hex_links[j].links[2];
-                }
-                else if (hex_links[j].links.Num()==4) {
-                    temp2 = hex_links[j].links[2];
-                    temp3 = hex_links[j].links[3];
-                }
-                if (GEngine)
-                {
-                    GEngine->AddOnScreenDebugMessage(-1, 145.f, FColor::Yellow, FString::Printf(TEXT("Links on face %d: %d %d %d %d"), i, hex_links[j].links[0], hex_links[j].links[1], temp2, temp3));
                 }
             }
         }
@@ -2836,24 +2820,52 @@ float AC_MapGenerator::GenerateGoldbergPolyhedron(int numDivs) {
                 else {
                     hex_links.Last().links.Push(hex_links.Num()-2);//Linking with left within face
                     hex_links.Last(1).links.Push(hex_links.Num()-1);//Linking back
-                    hex_links.Last().links.Push(hex_links.Num()-j-1);//Linking with topleft within face
-                    hex_links.Last(j).links.Push(hex_links.Num()-1);//Linking back
+                    hex_links.Last().links.Push(hex_links.Num()-j);//Linking with topleft within face
+                    hex_links.Last(j-1).links.Push(hex_links.Num()-1);//Linking back
                 }
                 if (k==(j-1)) {
-                    hex_links.Last().links.Push(memright[j-2]);//Linking with top right on segment
+                    hex_links.Last().links.Push(memright[j-2]);//Linking with topright on segment
                     hex_links[memright[j-2]].links.Push(hex_links.Num()-1);//Linking back
                     hex_links.Last().links.Push(memright[j-1]);//Linking with right on segment
                     hex_links[memright[j-1]].links.Push(hex_links.Num()-1);//Linking back
                 }
                 else {
-                    hex_links.Last().links.Push(hex_links.Num()-j);//Linking with topright within face
-                    hex_links.Last(j-1).links.Push(hex_links.Num()-1);//Linking back
+                    hex_links.Last().links.Push(hex_links.Num()-(j-1));//Linking with topright within face
+                    hex_links.Last(j-2).links.Push(hex_links.Num()-1);//Linking back
                 }
                 if (j==numDivs) {
                     hex_links.Last().links.Push(membot[k-1]);//Linking with botleft on segment
                     hex_links[membot[k-1]].links.Push(hex_links.Num()-1);//Linking back
                     hex_links.Last().links.Push(membot[k]);//Linking with botright on segment
                     hex_links[membot[k]].links.Push(hex_links.Num()-1);//Linking back
+                }
+            }
+        }
+        
+        if (i==4) {
+            for(int j = 0; j<hex_links.Num(); j++) {
+                int temp2 = -13, temp3 =-13, temp4 = -13, temp5 = -13;
+                if (hex_links[j].links.Num()==3) {
+                    temp2 = hex_links[j].links[2];
+                }
+                else if (hex_links[j].links.Num()==4) {
+                    temp2 = hex_links[j].links[2];
+                    temp3 = hex_links[j].links[3];
+                }
+                else if (hex_links[j].links.Num()==5) {
+                    temp2 = hex_links[j].links[2];
+                    temp3 = hex_links[j].links[3];
+                    temp4 = hex_links[j].links[4];
+                }
+                else if (hex_links[j].links.Num()==6) {
+                    temp2 = hex_links[j].links[2];
+                    temp3 = hex_links[j].links[3];
+                    temp4 = hex_links[j].links[4];
+                    temp5 = hex_links[j].links[5];
+                }
+                if (GEngine)
+                {
+                    GEngine->AddOnScreenDebugMessage(-1, 145.f, FColor::Yellow, FString::Printf(TEXT("Links on face %d: %d %d %d %d %d %d"), i, hex_links[j].links[0], hex_links[j].links[1], temp2, temp3, temp4, temp5));
                 }
             }
         }
@@ -2879,7 +2891,7 @@ float AC_MapGenerator::GenerateGoldbergPolyhedron(int numDivs) {
     for (int i=0; i<hex_links.Num(); i++) {
         if (hex_links[i].links.Num() != 6) {
             if (GEngine) {
-                GEngine->AddOnScreenDebugMessage(-1, 15.f, FColor::Yellow, FString::Printf(TEXT("Failed to properly link sphere; hexagon does not have 6 neighbors : %d"), i));
+                GEngine->AddOnScreenDebugMessage(-1, 15.f, FColor::Yellow, FString::Printf(TEXT("Failed to properly link sphere; hexagon does not have 6 neighbors : %d; nNeighbors: %d"), i, hex_links[i].links.Num()));
                 
             }
         }
@@ -2897,26 +2909,110 @@ float AC_MapGenerator::GenerateGoldbergPolyhedron(int numDivs) {
     
     //all points of all faces are now into the x-y-zhex arrays; must now rescale to correct radius for hexes and pents
     //calculate correct radius for numDivs
-    const float prefactor = 1.;
     const float angle_pents = 1.10714871779406;
     const float height_hex = 173.205080756888;
-    float radius = prefactor * height_hex * numDivs / angle_pents;
+    float radius = radiusScaling * height_hex * numDivs / angle_pents;
     
-    //rescale to correct radius
+    //rescale hexes to correct radius, and calculate scaling factor
+    float minirad=sqrt(xpent[0]*xpent[0] + ypent[0]*ypent[0] + zpent[0]*zpent[0]);
     for (int i=0; i<xhex.Num(); i++) {
         float mag = sqrtf(xhex[i]*xhex[i] + yhex[i]*yhex[i] + zhex[i]*zhex[i]);
         float scale = radius / mag;
-        xhex[i]=xhex[i]*scale;
-        yhex[i]=yhex[i]*scale;
-        zhex[i]=zhex[i]*scale;
+        xhex[i]*=scale;
+        yhex[i]*=scale;
+        zhex[i]*=scale;
+        scalefactor.Push(minirad/mag);
+    }
+    
+    //rescale pents to correct radius
+    for (int i=0; i<12; i++) {
+        float scale = radius/minirad;
+        xpent[i]*=scale;
+        ypent[i]*=scale;
+        zpent[i]*=scale;
     }
     
     return radius;
 }
 
-
-
-
+void AC_MapGenerator::OrderGoldbergLinking() {
+    //For all hexes, we order the neighbors; i.e. the neighbors next to each other in the array are next to each other on the sphere (first and last element are also neighbors)
+    for (int i=0; i<hex_links.Num(); i++) {
+        //Ordering each hex individually:
+        for (int j=0; j<(hex_links[i].links.Num()-2); j++) {
+            int current = hex_links[i].links[j];
+            //For each neighbor,
+            for (int k=j+1; k<hex_links[i].links.Num(); k++) {
+                int potNeighbor = hex_links[i].links[k];
+                bool foundNext=false;
+                //check if that neighbor is also a neighbor of current
+                if (current >= 0) {
+                    for (int l=0; l<hex_links[current].links.Num(); l++) {
+                    //if so, swap positions of neighbors in array of original hex
+                        if (hex_links[current].links[l] == potNeighbor) {
+                            hex_links[i].links[k]=hex_links[i].links[j+1];
+                            hex_links[i].links[j+1]=potNeighbor;
+                            foundNext=true;
+                            break;
+                        }
+                    }
+                }
+                else {//if neighbor is a pentagon
+                    current=-current-1;
+                    for (int l=0; l<pent_links[current].links.Num(); l++) {
+                    //if so, swap positions of neighbors in array of original hex
+                        if (pent_links[current].links[l] == potNeighbor) {
+                            hex_links[i].links[k]=hex_links[i].links[j+1];
+                            hex_links[i].links[j+1]=potNeighbor;
+                            foundNext=true;
+                            break;
+                        }
+                    }
+                }
+                if (foundNext) break;
+            }
+        }
+    }
+    
+    //For all pents, we order the neighbors; i.e. the neighbors next to each other in the array are next to each other on the sphere (first and last element are also neighbors)
+    for (int i=0; i<pent_links.Num(); i++) {
+        //Ordering each pent individually:
+        for (int j=0; j<pent_links[i].links.Num(); j++) {
+            int current = pent_links[i].links[j];
+            //For each neighbor,
+            for (int k=j+1; k<pent_links[i].links.Num(); k++) {
+                int potNeighbor = pent_links[i].links[k];
+                bool foundNext=false;
+                //check if that neighbor is also a neighbor of current
+                for (int l=0; l<hex_links[current].links.Num(); l++) {
+                    //if so, swap positions of neighbors in array of original hex
+                    if (hex_links[current].links[l] == potNeighbor) {
+                        pent_links[i].links[k]=pent_links[i].links[j+1];
+                        pent_links[i].links[j+1]=potNeighbor;
+                        foundNext=true;
+                        break;
+                    }
+                }
+                if (foundNext) break;
+            }
+        }
+    }
+    
+    
+    for (int i=0; i<33; i++) {
+        if (GEngine) {
+            GEngine->AddOnScreenDebugMessage(-1, 150.f, FColor::Yellow, FString::Printf(TEXT("Check on link ordering on hex %d : %d %d %d %d %d %d"), i, hex_links[i].links[0], hex_links[i].links[1], hex_links[i].links[2], hex_links[i].links[3], hex_links[i].links[4], hex_links[i].links[5]));
+            
+        }
+    }
+    
+    for (int i=0; i<12; i++) {
+        if (GEngine) {
+            GEngine->AddOnScreenDebugMessage(-1, 150.f, FColor::Yellow, FString::Printf(TEXT("Check on link ordering on pent %d : %d %d %d %d %d"), i, pent_links[i].links[0], pent_links[i].links[1], pent_links[i].links[2], pent_links[i].links[3], pent_links[i].links[4]));
+            
+        }
+    }
+}
 
 
 
