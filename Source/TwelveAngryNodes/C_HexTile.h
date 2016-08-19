@@ -53,6 +53,7 @@ enum class ETerrain : uint8
     VE_Tundra       UMETA(DisplayName="Tundra"),
     VE_Snow         UMETA(DisplayName="Snow"),
     VE_Desert       UMETA(DisplayName="Desert"),
+    VE_Peak         UMETA(DisplayName="Peak"),
     VE_Void         UMETA(DisplayName="Void"),
     VE_Hell         UMETA(DisplayName="Hell")
 };
@@ -140,18 +141,6 @@ public:
     //Neighbor link for transitions between tiles. WARNING : NEVER _EVER_ MODIFY NEIGHBORS DIRECTLY FROM A HEX
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Neighbor Links")
     AC_HexTile* neighbor6;
-    
-    //Hex information for map spawn
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Map Creation Variables", Meta=(ExposeOnSpawn=true))
-    int32 hextype;
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Map Creation Variables", Meta=(ExposeOnSpawn=true))
-    int32 coasttype;
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Map Creation Variables", Meta=(ExposeOnSpawn=true))
-    int32 oceantype;
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Map Creation Variables", Meta=(ExposeOnSpawn=true))
-    int32 rotation;
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Map Creation Variables", Meta=(ExposeOnSpawn=true))
-    int32 coastrotation;
     
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Game Info Variables")
     int32 foodYield;

@@ -29,97 +29,36 @@ AC_MapGenerator::AC_MapGenerator(const FObjectInitializer& ObjectInitializer) : 
  etc.
  */
 
-//Returns x value from a 1D array
-int32 AC_MapGenerator::getX(int32 i){
-    return (i % mapsizex);
-}
 
-//Returns y value from a 1D array
-int32 AC_MapGenerator::getY(int32 i){
-    return (i / mapsizex);
-}
-
+//From a position on the hex sphere, returns the index of the 'dir' neighbor (in 1D arrays); it is not always clear which neighbor is which, but modifying dir by +-1 will return the next neighbor around the original tile
+//Assumes a goldberg polyhedron; a positive index refers to a hex, a negative one to a pentagon, with an offset of -1 to prevent the double zero case (so pentagon indices go from -1 to -12 and should be mapped to 0 to 11)
+//Returns -13 if out of map
+//If dir is bigger than 6 (or 5 for a pentagon), subtracts 6 (or 5) from dir and calls itself with new dir; if smaller than 1, adds 6 to dir and calls itself with new dir
 int32 AC_MapGenerator::getNeighbor(int32 index, int32 dir)
 {
-    return getNeighbor(getX(index), getY(index), dir);
-}
-
-
-//From a position on the hex grid x and y, returns the index of the 'dir' neighbor (in 1D arrays) : 1=right, 2=topright, 3=topleft, 4=left, 5=botleft, 6=botright
-//Assumes a cylinder wrap, and so uses the xy notation for simplicity of finding special cases
-//Returns -1 if out of map
-//If dir is bigger than 6, subtracts 6 from dir and calls itself with new dir; if smaller than 1, adds 6 to dir and calls itself with new dir
-int32 AC_MapGenerator::getNeighbor(int32 x, int32 y, int32 dir)
-{
-    int32 ArrayPos=x+y*mapsizex;
-    switch (dir) {
-        case 1://going right
-            if (x==(mapsizex-1)) {
-                ArrayPos=ArrayPos-mapsizex+1;
-            }
-            else{
-                ArrayPos++;
-            }
-            break;
-        case 2://going topright
-            if (y==(mapsizey-1)) {
-                ArrayPos=-1; //going out top
-            }
-            else{
-                ArrayPos=ArrayPos+mapsizex;
-            }
-            break;
-        case 3://going topleft
-            if (y==(mapsizey-1)){
-                ArrayPos=-1; //going out top
-            }
-            else if (x==0) {
-                ArrayPos=ArrayPos+2*mapsizex-1;
-            }
-            else{
-                ArrayPos=ArrayPos+mapsizex-1;
-            }
-            break;
-        case 4://going left
-            if (x==0) {
-                ArrayPos=ArrayPos+mapsizex-1;
-            }
-            else{
-                ArrayPos--;
-            }
-            break;
-        case 5://going botleft
-            if (y==0) {
-                ArrayPos=-1; //going out bot
-            }
-            else{
-                ArrayPos=ArrayPos-mapsizex;
-            }
-            break;
-        case 6://going botright
-            if (y==0) {
-                ArrayPos=-1; //going out bot
-            }
-            else if (x==(mapsizex-1)) {
-                ArrayPos=ArrayPos-2*mapsizex+1;
-            }
-            else {
-                ArrayPos=ArrayPos-mapsizex+1;
-            }
-            break;
-        default:
-            if (dir>6) {
-                return getNeighbor(x, y, dir-6);
-            }
-            else if (dir<1) {
-                return getNeighbor(x, y, dir+6);
-            }
-            else {
-                ArrayPos=-1;
-            }
-            break;
+    if (index >= 0) {
+        if (dir<1) {
+            return getNeighbor(index, dir+6);
+        }
+        else if (dir>6) {
+            return getNeighbor(index, dir-6);
+        }
+        else {
+            return hex_links[index].links[dir-1];
+        }
     }
-    return ArrayPos;
+    else if (index > -13) {
+        if (dir<1) {
+            return getNeighbor(index, dir+5);
+        }
+        else if (dir>5) {
+            return getNeighbor(index, dir-5);
+        }
+        else {
+            return pent_links[-index-1].links[dir-1];
+        }
+    }
+    else return -13;
 }
 
 
@@ -127,27 +66,27 @@ int32 AC_MapGenerator::getNeighbor(int32 x, int32 y, int32 dir)
 //Altitudes : 0=water, 1=lowlands, 2=midlands, 3=highlands
 void AC_MapGenerator::GenerateAltitudeMap()
 {
-    int32 mapsize=mapsizex*mapsizey;
+    int32 mapsize=hex_links.Num();
     AltitudeMap.SetNum(mapsize);
     
-    for (int32 i = 0; i<(mapsize); i++) {
+    for (int32 i = 0; i<mapsize; i++) {
         AltitudeMap[i]=0;
     }
     
     
     //Chain mechanism : A certain number of chains of varying lengths will be placed on the map to elevate the altitude of the map; implementation of chains lower
-    int32 const LongChains = 0/*1*/, LengthLong=1000;
-    int32 const MediumChains = 1/*3*/, LengthMedium=400;
-    int32 const ShortChains = 2, LengthShort=100;
+    int32 const LongChains = 1, LengthLong=1000;
+    int32 const MediumChains = 3, LengthMedium=400;
+    int32 const ShortChains = 4, LengthShort=100;
     int32 const TinyChains = 10, LengthTiny=4;
     int32 const NumberOfChains = LongChains+MediumChains+ShortChains+TinyChains;
     int32 Chains[NumberOfChains];
-    int32 ChainActual, gridx, gridy;
+    int32 ChainActual;
     int32 nextDir;
-    //Chain implementation : each chain starts at a random location and elevates terrain there; the getNeighbor function is then used to move to an adjacent tile and elevate it; loops until the chain is finished, then moves on to the next chain
+    //Chain implementation : each chain starts next to a node and elevates terrain there; the getNeighbor function is then used to move to an adjacent tile and elevate it; loops until the chain is finished, then moves on to the next chain
     for (int32 i=0; i<NumberOfChains; i++) {
         
-        //Setting length of chains
+        //Setting length of current chain
         if (i<LongChains) {
             Chains[i]=randomstream.RandRange(LengthLong/2, LengthLong*3/2);
         }
@@ -162,37 +101,32 @@ void AC_MapGenerator::GenerateAltitudeMap()
         }
         
         //Setting starting point of current chain
-        ChainActual=randomstream.RandRange(0, mapsize-1);
-        gridx=getX(ChainActual);
-        gridy=getY(ChainActual);
+        ChainActual=randomstream.RandRange(0, 11);
+        ChainActual=getNeighbor(-ChainActual-1, randomstream.RandRange(1, 6));
         
         for (int32 j=0; j<Chains[i];j++) {
-            if ((AltitudeMap[ChainActual])<3) { //Elevate if not too high
-                AltitudeMap[ChainActual]++;
+            if (ChainActual >= 0) {
+                if ((AltitudeMap[ChainActual])<3) { //Elevate if not too high
+                    AltitudeMap[ChainActual]++;
+                }
             }
             nextDir=randomstream.RandRange(1, 6);
-            while (getNeighbor(gridx, gridy, nextDir)==-1) { //Handling out-of-map
-                nextDir=randomstream.RandRange(1, 6);
-            }
-            ChainActual=getNeighbor(gridx, gridy, nextDir);
-            gridx=getX(ChainActual);
-            gridy=getY(ChainActual);
-            
+            ChainActual=getNeighbor(ChainActual, nextDir);
         }
     }
 }
 
 //Post-processes the previously generated altitude map so that there are less long land chains joining continents, creating more bays and islands
 void AC_MapGenerator::PostProcessLongLandChains() {
-    int32 mapsize=mapsizex*mapsizey;
+    int32 mapsize=hex_links.Num();
     TArray<int32> LongChains;
     for (int32 i=0; i<mapsize; i++) {
         if (AltitudeMap[i]==1) {
             int32 NumberOfWaterNeighbors=0;
             bool isLongChain=true;
             for (int32 j=0; j<6; j++) {
-                int32 Neighbor=getNeighbor(getX(i), getY(i), j+1);
-                if (Neighbor != -1) {
+                int32 Neighbor=getNeighbor(i, j+1);
+                if (Neighbor >= 0) {
                     if (AltitudeMap[Neighbor]==0) {
                         NumberOfWaterNeighbors++;
                     }
@@ -216,7 +150,7 @@ void AC_MapGenerator::PostProcessLongLandChains() {
 
 //Post-processes lakes : removes some of them and elevates with land some others. Also fills up the Lakes array
 void AC_MapGenerator::PostProcessLakes() {
-    int32 mapsize=mapsizex*mapsizey;
+    int32 mapsize=hex_links.Num();
     
     //Finds all lakes on the map
     for (int32 i=0; i<mapsize; i++) {
@@ -232,7 +166,6 @@ void AC_MapGenerator::PostProcessLakes() {
                 if (!isAlreadyLake) {
                     WaterBody *potentialLake = new WaterBody();
                     if (CheckIfLake(i, potentialLake)) {
-                        FString NewString = FString::FromInt(potentialLake->tiles.Num());
                         Lakes.Push(potentialLake);
                     }
                 }
@@ -255,8 +188,8 @@ void AC_MapGenerator::PostProcessLakes() {
         TArray<int32> LakeCoast;
         for (int32 j=0; j<Lakes[i]->tiles.Num(); j++) {
             for (int32 k=0; k<6; k++) {
-                int32 current = getNeighbor(getX(Lakes[i]->tiles[j]), getY(Lakes[i]->tiles[j]), k+1);
-                if (current!=-1) { //Dealing with out-of-map cases
+                int32 current = getNeighbor(Lakes[i]->tiles[j], k+1);
+                if (current>-1) { //Dealing with out-of-map cases
                     if (AltitudeMap[current]!=0) {
                         if (!(LakeCoast.Contains(current))) {
                             LakeCoast.Push(current);
@@ -294,9 +227,9 @@ void AC_MapGenerator::PostProcessLakes() {
     }
 }
 
-//Checks if a given waterbody is a lake; a lake has an area equal to or less than 8 tiles
+//Checks if a given waterbody is a lake; a lake has an area equal to or less than 8 tiles. Fills up input waterbody if actually a lake
 bool AC_MapGenerator::CheckIfLake(int32 start, WaterBody *lake) {
-    int32 mapsize=mapsizex*mapsizey;
+    int32 mapsize=hex_links.Num();
     TArray<int32> frontier;
     TArray<int32> visited;
     
@@ -310,8 +243,8 @@ bool AC_MapGenerator::CheckIfLake(int32 start, WaterBody *lake) {
         int32 current=frontier.Pop();
         visited.Push(current);
         for (int32 j=1; j<7; j++) {
-            int32 actualNeighbor = getNeighbor(getX(current), getY(current), j);
-            if (actualNeighbor!=-1) {
+            int32 actualNeighbor = getNeighbor(current, j);
+            if (actualNeighbor>-1) {
                 if (AltitudeMap[actualNeighbor]==0) {
                     if ((!visited.Contains(actualNeighbor)) && !frontier.Contains(actualNeighbor)) {
                         frontier.Push(actualNeighbor);
@@ -321,9 +254,7 @@ bool AC_MapGenerator::CheckIfLake(int32 start, WaterBody *lake) {
         }
     }
     //If water body is a lake, fill up a WaterBody element
-    for (int32 i=0; i<visited.Num(); i++) {
-        lake->tiles.Push(visited[i]);
-    }
+    lake->tiles.Append(visited);
     lake->altitude=0;
     return true;
 }
@@ -347,8 +278,8 @@ bool AC_MapGenerator::CheckIfOcean(int32 i){
     }
     int32 currentNeighbor;
     for (int32 j=1; j<7; j++) {
-        currentNeighbor=getNeighbor(getX(i), getY(i), j);
-        if (currentNeighbor != -1) {
+        currentNeighbor=getNeighbor(i, j);
+        if (currentNeighbor > -1) {
             if (AltitudeMap[currentNeighbor] != 0) {
                 isOcean=false;
                 break;
@@ -360,35 +291,19 @@ bool AC_MapGenerator::CheckIfOcean(int32 i){
 
 
 
-//Computes an "apparent latitude" for climate based on latitude and elevation
-//SUPPOSES AN ODD NUMBER OF ROWS
-int32 AC_MapGenerator::getApparentLatitude(int32 index){
-    int32 y = getY(index);
-    int32 equator = mapsizey/2;
-    if (y<=equator) {
-        return equator-y+(AltitudeMap[index]-1)*equator/6;//If adjusting elevation, dont forget to adjust also 'maxlatitude' in weight functions
-    }
-    else {
-        return y-equator+(AltitudeMap[index]-1)*equator/6;
-    }
+//Computes an "apparent latitude" for climate based on latitude and elevation; max value of 4/3
+float AC_MapGenerator::getApparentLatitude(int32 index){
+    return fabsf(getLatitude(index)+(AltitudeMap[index]-1)/6);//If changing /6 factor, also need to change maxlatitude in weight functions just below
 }
 
-//Computes real latitude for climate
-//SUPPOSES AN ODD NUMBER OF ROWS
-int32 AC_MapGenerator::getLatitude(int32 index){
-    int32 y = getY(index);
-    int32 equator = mapsizey/2;
-    if (y<=equator) {
-        return equator-y;
-    }
-    else {
-        return y-equator;
-    }
+//Computes real latitude for climate: ratio of z position to radius
+float AC_MapGenerator::getLatitude(int32 index){
+    return fabsf(zhex[index]/zpent[0]);
 }
 
 //Calculates a probability weight to get a snow tile
-int32 AC_MapGenerator::getSnowWeight(int32 latitude){
-    int32 maxlatitude=(mapsizey/2+1)*7/6;
+float AC_MapGenerator::getSnowWeight(float latitude){
+    float maxlatitude=(float) 4/ (float) 3;
     if (latitude>maxlatitude*3/4) {
         return 6*(latitude-maxlatitude*3/4);
     }
@@ -398,8 +313,8 @@ int32 AC_MapGenerator::getSnowWeight(int32 latitude){
 }
 
 //Calculates a probability weight to get a tundra tile
-int32 AC_MapGenerator::getTundraWeight(int32 latitude){
-    int32 maxlatitude=(mapsizey/2+1)*7/6;
+float AC_MapGenerator::getTundraWeight(float latitude){
+    float maxlatitude=(float) 4/ (float) 3;
     if (latitude>maxlatitude/2) {
         return latitude-maxlatitude/2;
     }
@@ -409,8 +324,8 @@ int32 AC_MapGenerator::getTundraWeight(int32 latitude){
 }
 
 //Calculates a probability weight to get a plain tile
-int32 AC_MapGenerator::getPlainWeight(int32 latitude){
-    int32 maxlatitude=(mapsizey/2+1)*7/6;
+float AC_MapGenerator::getPlainWeight(float latitude){
+    float maxlatitude=(float) 4/ (float) 3;
     if (latitude<=maxlatitude/2) {
         return latitude;
     }
@@ -420,8 +335,8 @@ int32 AC_MapGenerator::getPlainWeight(int32 latitude){
 }
 
 //Calculates a probability weight to get a grassland tile
-int32 AC_MapGenerator::getGrassWeight(int32 latitude){
-    int32 maxlatitude=(mapsizey/2+1)*7/6;
+float AC_MapGenerator::getGrassWeight(float latitude){
+    float maxlatitude=(float) 4/ (float) 3;
     if (latitude<=maxlatitude*2/3) {
         return 2*(maxlatitude*2/3-latitude);
     }
@@ -433,8 +348,8 @@ int32 AC_MapGenerator::getGrassWeight(int32 latitude){
 //Generates terrain types : grassland, tundra, snow, etc. Also fills up the LandTiles and WaterTiles arrays. Does not place deserts; these will be placed later when rivers are placed.
 void AC_MapGenerator::GenerateTerrainType()
 {
-    int32 mapsize = mapsizex*mapsizey;
-    int32 latitude, applatitude, snowWeight, tundraWeight, plainWeight, grassWeight, totalWeight;
+    int32 mapsize = hex_links.Num();
+    float latitude, applatitude, snowWeight, tundraWeight, plainWeight, grassWeight, totalWeight;
     int32 weightedRandomFactor;
     
     TerrainType.SetNum(mapsize);
@@ -455,7 +370,8 @@ void AC_MapGenerator::GenerateTerrainType()
             plainWeight = getPlainWeight(applatitude);
             grassWeight = getGrassWeight(applatitude);
             totalWeight = snowWeight + tundraWeight + plainWeight + grassWeight;
-            weightedRandomFactor= randomstream.RandRange(0, totalWeight-1);
+            //weightedRandomFactor= randomstream.RandRange(0, totalWeight-1);
+            weightedRandomFactor = randomstream.FRandRange(0, totalWeight);
             if (weightedRandomFactor<grassWeight) {
                 TerrainType[i]=ETerrain::VE_Grassland;
             }
@@ -474,7 +390,7 @@ void AC_MapGenerator::GenerateTerrainType()
     
     for (int32 i=0; i<LandTiles.Num(); i++) {
         latitude=getLatitude(LandTiles[i]);
-        if (latitude > getLatitude(0)*5/6) {
+        if (latitude > ((float) 5/(float) 6)) {
             TerrainType[LandTiles[i]]=ETerrain::VE_Snow;
         }
     }
@@ -510,7 +426,7 @@ void AC_MapGenerator::BuildRivers(int32 numberOfRivers)
         for (int32 j=0; j<7; j++) {
             if (CheckIfEligibleRiverStart(LandTiles[i], j)) {
                 PotentialStartLeftBank.Push(LandTiles[i]);
-                PotentialStartRightBank.Push(getNeighbor(getX(LandTiles[i]), getY(LandTiles[i]), j));
+                PotentialStartRightBank.Push(getNeighbor(LandTiles[i], j));
                 PotentialStartDir.Push(j);
             }
         }
@@ -545,7 +461,7 @@ void AC_MapGenerator::BuildRivers(int32 numberOfRivers)
     
     //Fills up RiverOn* arrays for pathfinding (and desert placement)
     //First filling with 0s
-    int32 mapsize = mapsizex*mapsizey;
+    int32 mapsize = hex_links.Num();
     RiverOn1.SetNum(mapsize);
     RiverOn2.SetNum(mapsize);
     RiverOn3.SetNum(mapsize);
@@ -648,7 +564,7 @@ bool AC_MapGenerator::BuildRiverSegment(int32 startLeft, int32 startRight, int32
     
     bool anotherLoop=true;
     while (anotherLoop) {
-        int32 goingTowards=getNeighbor(getX(actualSeg->LeftBank.Last()), getY(actualSeg->LeftBank.Last()), actualSeg->dir.Last()+1);
+        int32 goingTowards=getNeighbor(actualSeg->LeftBank.Last(), actualSeg->dir.Last()+1);
         if (goingTowards!=-1) {//REDUNDANCY CHECKS :D
             
             if ((CheckifAlreadyInLeftBank(goingTowards) && CheckifAlreadyInRightBank(startLeft)) ||
@@ -657,8 +573,8 @@ bool AC_MapGenerator::BuildRiverSegment(int32 startLeft, int32 startRight, int32
                 return false; //Case where a river can't start where it was supposed to because of another river having already taken its place
             }
             
-            int32 goingToLeft=getNeighbor(getX(actualSeg->LeftBank.Last()), getY(actualSeg->LeftBank.Last()), actualSeg->dir.Last()+2);
-            int32 goingToRight=getNeighbor(getX(actualSeg->RightBank.Last()), getY(actualSeg->RightBank.Last()), actualSeg->dir.Last()+1);
+            int32 goingToLeft=getNeighbor(actualSeg->LeftBank.Last(), actualSeg->dir.Last()+2);
+            int32 goingToRight=getNeighbor(actualSeg->RightBank.Last(), actualSeg->dir.Last()+1);
             int32 nextTurn=0;//1=right, 2=left, 3=random, 4=end, 5=hit a lake
             if (CheckIfLakeTile(goingTowards) != -1) {
                 nextTurn=5;
@@ -892,12 +808,12 @@ bool AC_MapGenerator::CheckIfEligibleRiverStart(int32 i, int32 dir)
     int32 topdir=dir+1;
     int32 botdir=dir-1;
     
-    int32 current=getNeighbor(getX(i), getY(i), dir);
-    int32 topcurrent=getNeighbor(getX(i), getY(i), topdir);
-    int32 botcurrent=getNeighbor(getX(i), getY(i), botdir);
+    int32 current=getNeighbor(i, dir);
+    int32 topcurrent=getNeighbor(i, topdir);
+    int32 botcurrent=getNeighbor(i, botdir);
     
-    if ((current==-1) || (topcurrent==-1) || (botcurrent==-1)) {//This is probably redundant, but better be safe
-        return false;//side of map -> nope
+    if ((current>-1) || (topcurrent>-1) || (botcurrent>-1)) {//This is probably redundant, but better be safe
+        return false;//near a node -> nope
     }
     
     if (TerrainType[botcurrent]==ETerrain::VE_Coast) {
@@ -950,12 +866,12 @@ bool AC_MapGenerator::CheckIfEligibleRiverLakeStart(int32 i, int32 dir, int32 la
     int32 topdir=dir+1;
     int32 botdir=dir-1;
     
-    int32 current=getNeighbor(getX(i), getY(i), dir);
-    int32 topcurrent=getNeighbor(getX(i), getY(i), topdir);
-    int32 botcurrent=getNeighbor(getX(i), getY(i), botdir);
+    int32 current=getNeighbor(i, dir);
+    int32 topcurrent=getNeighbor(i, topdir);
+    int32 botcurrent=getNeighbor(i, botdir);
     
-    if ((current==-1) || (topcurrent==-1) || (botcurrent==-1)) {//This is probably redundant, but better be safe
-        return false;//side of map -> nope
+    if ((current>-1) || (topcurrent>-1) || (botcurrent>-1)) {//This is probably redundant, but better be safe
+        return false;//near a node -> nope
     }
 
     if (TerrainType[botcurrent]==ETerrain::VE_Lake) {
@@ -1008,13 +924,13 @@ bool AC_MapGenerator::CheckIfEligibleRiverLakeStart(int32 i, int32 dir, int32 la
 //Fills up the freshWaterTiles array; 0 is no fresh water, 1 is next to lake, 2 is next to river; river overrides lake. Needs rivers and lakes to be placed so need to be placed after BuildRivers and before GenerateDeserts
 void AC_MapGenerator::CheckFreshWater()
 {
-    freshWater.SetNum(mapsizex*mapsizey);
-    for (int32 i=0; i<(mapsizex*mapsizey); i++) {
+    freshWater.SetNum(hex_links.Num());
+    for (int32 i=0; i<hex_links.Num(); i++) {
         int32 freshWaterType=0;
         if ((TerrainType[i]!=ETerrain::VE_Coast) || (TerrainType[i]!=ETerrain::VE_Lake) || (TerrainType[i]!=ETerrain::VE_Ocean)) {//if tile is not water, then
             for (int32 j=1; j<7; j++) {
-                int32 current = getNeighbor(getX(i), getY(i), j);
-                if (current != -1) {
+                int32 current = getNeighbor(i, j);
+                if (current > -1) {
                     if (TerrainType[current] == ETerrain::VE_Lake) {//check if it's next to a lake
                         freshWaterType=1;
                     }
@@ -1032,8 +948,8 @@ void AC_MapGenerator::CheckFreshWater()
 bool AC_MapGenerator::CheckIfTileIsNextToWater(int32 index)
 {
     for (int32 i=1; i<7; i++) {
-        int32 current = getNeighbor(getX(index), getY(index), i);
-        if (current != -1) {
+        int32 current = getNeighbor(index, i);
+        if (current > -1) {
             if ((TerrainType[i]==ETerrain::VE_Coast) || (TerrainType[i]==ETerrain::VE_Lake) || (TerrainType[i]==ETerrain::VE_Ocean)) {
                 return true;
             }
@@ -1054,8 +970,8 @@ void AC_MapGenerator::GenerateDeserts()
         if ((CheckIfTileIsNextToWater(LandTiles[i])) && (TerrainType[LandTiles[i]] != ETerrain::VE_Snow)) {//Tile is not next to water and is not snow
             bool neighborsHaveNoWater=true;
             for (int32 j=1; j<7; j++) {
-                int32 current= getNeighbor(getX(LandTiles[i]), getY(LandTiles[i]), j);
-                if (current != -1) {
+                int32 current= getNeighbor(LandTiles[i], j);
+                if (current > -1) {
                     if (freshWater[current] != 0) {//Tile's neighbors are not next to water either
                         neighborsHaveNoWater=false;
                         break;
@@ -1077,7 +993,7 @@ void AC_MapGenerator::GenerateDeserts()
     int32 ChainLength = 6;
     TArray<int32> Chains;
     Chains.SetNum(potentialSeeds.Num());
-    int32 ChainActual, gridx, gridy;
+    int32 ChainActual;
     int32 nextDir;
 
     //Markov chains similar to the ones used to generate altitude map; starts somewhere and then moves randomly around for a randomized length, transforming every land tile to desert (except snow)
@@ -1085,1053 +1001,23 @@ void AC_MapGenerator::GenerateDeserts()
         Chains[i]=randomstream.RandRange(1, ChainLength*2);
         
         ChainActual=potentialSeeds[i];
-        gridx=getX(ChainActual);
-        gridy=getY(ChainActual);
         
         for (int32 j=0; j<Chains[i]; j++) {
-            if ((TerrainType[ChainActual] != ETerrain::VE_Coast) && (TerrainType[ChainActual] != ETerrain::VE_Snow)) { //If terrain is not water or snow, set to desert
-                TerrainType[ChainActual]=ETerrain::VE_Desert;
+            if (ChainActual >= 0) {
+                if ((TerrainType[ChainActual] != ETerrain::VE_Coast) && (TerrainType[ChainActual] != ETerrain::VE_Snow)) { //If terrain is not water or snow, set to desert
+                    TerrainType[ChainActual]=ETerrain::VE_Desert;
+                }
             }
             nextDir=randomstream.RandRange(1, 6);
-            while (getNeighbor(gridx, gridy, nextDir) == -1) {//Handling out-of-map cases
-                nextDir=randomstream.RandRange(1, 6);
-            }
-            ChainActual=getNeighbor(gridx, gridy, nextDir);
-            gridx=getX(ChainActual);
-            gridy=getY(ChainActual);
+            ChainActual=getNeighbor(ChainActual, nextDir);
         }
-    }
-}
-
-
-//Takes in a altitude map and determines where ramps should be placed on every hex in the map, in the form of 2 1D arrays. See .h for hex ramp types, rotations are multiples of +60 degrees (0,1,2,3,4,5)
-//Uses unreduced AltitudeMap and TerrainType arrays (to check if terrain is water), so has to be placed between GenerateTerrainType and ReduceLandAltitude
-void AC_MapGenerator::GetHexTypesAndRotations()
-{
-    int32 mapsize = mapsizex*mapsizey;
-    int32 x, y;
-    
-    int32 currentRotation, additionalCoastRotation;
-    int32 arrayPosNeighbor;
-    
-    int32 temp;
-    int32 Ramps[6];
-    int32 CliffCoast[6];
-    bool Ocean[6];
-    
-    RampType.SetNum(mapsize);
-    CoastType.SetNum(mapsize);
-    OceanCoastType.SetNum(mapsize);
-    RampRotation.SetNum(mapsize);
-    CoastRotation.SetNum(mapsize);
-    
-    //Determining the type and rotation of each tile from the Ramps array
-    for (int32 i=0; i<mapsize; i++) {
- 
-        //Determining configuration of neighbors for position of ramps/coasts
-        x=getX(i);
-        y=getY(i);
-        for (int32 j=0; j<6; j++) {
-            CliffCoast[j]=0;
-            Ocean[j]=false;
-            arrayPosNeighbor = getNeighbor(x, y, j+1);
-            if (arrayPosNeighbor == -1) {//Dealing with out-of-map cases
-                Ramps[j]=0;
-            }
-            else if ((AltitudeMap[arrayPosNeighbor]-AltitudeMap[i]) == 1) {
-                Ramps[j]=1;
-            }
-            else if ((TerrainType[i] == ETerrain::VE_Coast) || (TerrainType[i] == ETerrain::VE_Lake)) {//For cases of coasts next to cliffs
-                if ((AltitudeMap[arrayPosNeighbor]-AltitudeMap[i]) > 1) {
-                    Ramps[j]=1;
-                    CliffCoast[j]=1;
-                }
-                else {
-                    Ramps[j]=0;
-                    Ocean[j]=CheckIfOcean(arrayPosNeighbor);//Checks if neighbor is an ocean hex
-                }
-            }
-            else {
-                Ramps[j]=0;
-            }
-        }
- 
-        currentRotation=0;
-        additionalCoastRotation=0;
-        OceanCoastType[i]=0;//By default, all ocean coast types are 0
-        
-        //Checking 000000 case
-        if (Ramps[0]==0 && Ramps[1]==0 && Ramps[2]==0 && Ramps[3]==0 && Ramps[4]==0 && Ramps[5]==0) {
-            RampType[i]=0;
-            CoastType[i]=0;
-            currentRotation=randomstream.RandRange(0, 5);
-        }
-
-        //Checking 111111 case
-        else if (Ramps[0]==1 && Ramps[1]==1 && Ramps[2]==1 && Ramps[3]==1 && Ramps[4]==1 && Ramps[5]==1) {
-            RampType[i]=13;
-            CoastType[i]=13;
-            
-            //Checking cliff profile; no possible ocean profile
-            if ((CliffCoast[0]+CliffCoast[1]+CliffCoast[2]+CliffCoast[3]+CliffCoast[4]+CliffCoast[5])==0) {
-                currentRotation=randomstream.RandRange(0, 5);
-            }
-            else if ((CliffCoast[0]+CliffCoast[1]+CliffCoast[2]+CliffCoast[3]+CliffCoast[4]+CliffCoast[5])==1) {
-                CoastType[i]=12;
-                if (CliffCoast[0]==1) {
-                    additionalCoastRotation=1;
-                }
-                else if (CliffCoast[1]==1) {
-                    additionalCoastRotation=2;
-                }
-                else if (CliffCoast[2]==1) {
-                    additionalCoastRotation=3;
-                }
-                else if (CliffCoast[3]==1) {
-                    additionalCoastRotation=4;
-                }
-                else if (CliffCoast[4]==1) {
-                    additionalCoastRotation=5;
-                }
-            }
-            else if ((CliffCoast[0]+CliffCoast[1]+CliffCoast[2]+CliffCoast[3]+CliffCoast[4]+CliffCoast[5])==2) {
-                if (CliffCoast[0]==1) {
-                    if (CliffCoast[1]==1) {
-                        CoastType[i]=9;
-                        additionalCoastRotation=2;
-                    }
-                    else if (CliffCoast[2]==1) {
-                        CoastType[i]=10;
-                        additionalCoastRotation=3;
-                    }
-                    else if (CliffCoast[3]==1) {
-                        CoastType[i]=11;
-                        additionalCoastRotation=1;
-                    }
-                    else if (CliffCoast[4]==1) {
-                        CoastType[i]=10;
-                        additionalCoastRotation=1;
-                    }
-                    else {
-                        CoastType[i]=9;
-                        additionalCoastRotation=1;
-                    }
-                }
-                else if (CliffCoast[1]==1) {
-                    if (CliffCoast[2]==1) {
-                        CoastType[i]=9;
-                        additionalCoastRotation=3;
-                    }
-                    else if (CliffCoast[3]==1) {
-                        CoastType[i]=10;
-                        additionalCoastRotation=4;
-                    }
-                    else if (CliffCoast[4]==1) {
-                        CoastType[i]=11;
-                        additionalCoastRotation=2;
-                    }
-                    else {
-                        CoastType[i]=10;
-                        additionalCoastRotation=2;
-                    }
-                }
-                else if (CliffCoast[2]==1) {
-                    if (CliffCoast[3]==1) {
-                        CoastType[i]=9;
-                        additionalCoastRotation=4;
-                    }
-                    else if (CliffCoast[4]==1) {
-                        CoastType[i]=10;
-                        additionalCoastRotation=5;
-                    }
-                    else {
-                        CoastType[i]=11;
-                    }
-                }
-                else if (CliffCoast[3]==1) {
-                    if (CliffCoast[4]==1) {
-                        CoastType[i]=9;
-                        additionalCoastRotation=5;
-                    }
-                    else {
-                        CoastType[i]=10;
-                    }
-                }
-                else {
-                    CoastType[i]=9;
-                }
-            }
-            else if ((CliffCoast[0]+CliffCoast[1]+CliffCoast[2]+CliffCoast[3]+CliffCoast[4]+CliffCoast[5])==3) {
-                if (CliffCoast[0]==0) {
-                    if (CliffCoast[1]==0) {
-                        if (CliffCoast[2]==0) {
-                            CoastType[i]=5;
-                        }
-                        else if (CliffCoast[3]==0) {
-                            CoastType[i]=6;
-                        }
-                        else if (CliffCoast[4]==0) {
-                            CoastType[i]=7;
-                        }
-                        else {
-                            CoastType[i]=5;
-                            additionalCoastRotation=5;
-                        }
-                    }
-                    else if (CliffCoast[2]==0) {
-                        if (CliffCoast[3]==0) {
-                            CoastType[i]=7;
-                            additionalCoastRotation=2;
-                        }
-                        else if (CliffCoast[4]==0) {
-                            CoastType[i]=8;
-                        }
-                        else {
-                            CoastType[i]=6;
-                            additionalCoastRotation=5;
-                        }
-                    }
-                    else if (CliffCoast[3]==0) {
-                        if (CliffCoast[4]==0) {
-                            CoastType[i]=6;
-                            additionalCoastRotation=3;
-                        }
-                        else {
-                            CoastType[i]=7;
-                            additionalCoastRotation=5;
-                        }
-                    }
-                    else {
-                        CoastType[i]=5;
-                        additionalCoastRotation=4;
-                    }
-                }
-                else if (CliffCoast[1]==0) {
-                    if (CliffCoast[2]==0) {
-                        additionalCoastRotation=1;
-                        if (CliffCoast[3]==0) {
-                            CoastType[i]=5;
-                        }
-                        else if (CliffCoast[4]==0) {
-                            CoastType[i]=6;
-                        }
-                        else {
-                            CoastType[i]=7;
-                        }
-                    }
-                    else if (CliffCoast[3]==0) {
-                        if (CliffCoast[4]==0) {
-                            CoastType[i]=7;
-                            additionalCoastRotation=3;
-                        }
-                        else {
-                            CoastType[i]=8;
-                            additionalCoastRotation=1;
-                        }
-                    }
-                    else {
-                        CoastType[i]=6;
-                        additionalCoastRotation=4;
-                    }
-                }
-                else if (CliffCoast[2]==0) {
-                    if (CliffCoast[3]==0) {
-                        additionalCoastRotation=2;
-                        if (CliffCoast[4]==0) {
-                            CoastType[i]=5;
-                        }
-                        else {
-                            CoastType[i]=6;
-                        }
-                    }
-                    else {
-                        CoastType[i]=7;
-                        additionalCoastRotation=4;
-                    }
-                }
-                else {
-                    CoastType[i]=5;
-                    additionalCoastRotation=3;
-                }
-            }
-            else if ((CliffCoast[0]+CliffCoast[1]+CliffCoast[2]+CliffCoast[3]+CliffCoast[4]+CliffCoast[5])==4) {
-                if (CliffCoast[0]==0) {
-                    if (CliffCoast[1]==0) {
-                        CoastType[i]=2;
-                    }
-                    else if (CliffCoast[2]==0) {
-                        CoastType[i]=3;
-                    }
-                    else if (CliffCoast[3]==0) {
-                        CoastType[i]=4;
-                    }
-                    else if (CliffCoast[4]==0) {
-                        CoastType[i]=3;
-                        additionalCoastRotation=4;
-                    }
-                    else {
-                        CoastType[i]=2;
-                        additionalCoastRotation=5;
-                    }
-                }
-                else if (CliffCoast[1]==0) {
-                    if (CliffCoast[2]==0) {
-                        CoastType[i]=2;
-                        additionalCoastRotation=1;
-                    }
-                    else if (CliffCoast[3]==0) {
-                        CoastType[i]=3;
-                        additionalCoastRotation=1;
-                    }
-                    else if (CliffCoast[4]==0) {
-                        CoastType[i]=4;
-                        additionalCoastRotation=1;
-                    }
-                    else {
-                        CoastType[i]=3;
-                        additionalCoastRotation=5;
-                    }
-                }
-                else if (CliffCoast[2]==0) {
-                    additionalCoastRotation=2;
-                    if (CliffCoast[3]==0) {
-                        CoastType[i]=2;
-                    }
-                    else if (CliffCoast[4]==0) {
-                        CoastType[i]=3;
-                    }
-                    else {
-                        CoastType[i]=4;
-                    }
-                }
-                else if (CliffCoast[3]==0) {
-                    additionalCoastRotation=3;
-                    if (CliffCoast[4]==0) {
-                        CoastType[i]=2;
-                    }
-                    else {
-                        CoastType[i]=3;
-                    }
-                }
-                else {
-                    CoastType[i]=2;
-                    additionalCoastRotation=4;
-                }
-            }
-            else if ((CliffCoast[0]+CliffCoast[1]+CliffCoast[2]+CliffCoast[3]+CliffCoast[4]+CliffCoast[5])==5) {
-                CoastType[i]=1;
-                if (CliffCoast[1]==0) {
-                    additionalCoastRotation=1;
-                }
-                else if (CliffCoast[2]==0) {
-                    additionalCoastRotation=2;
-                }
-                else if (CliffCoast[3]==0) {
-                    additionalCoastRotation=3;
-                }
-                else if (CliffCoast[4]==0) {
-                    additionalCoastRotation=4;
-                }
-                else if (CliffCoast[5]==0) {
-                    additionalCoastRotation=5;
-                }
-            }
-            else if ((CliffCoast[0]+CliffCoast[1]+CliffCoast[2]+CliffCoast[3]+CliffCoast[4]+CliffCoast[5])==6) {
-                CoastType[i]=0;
-            }
-        }
-        
-        //Must account for possible rotations in all other cases
-        else {
-            for (int32 j=0; j<6; j++) {
-                
-                //Checking 100000 case
-                if (Ramps[0]==1 && Ramps[1]==0 && Ramps[2]==0 && Ramps[3]==0 && Ramps[4]==0 && Ramps[5]==0) {
-                    RampType[i]=1;
-                    CoastType[i]=1;
-                    
-                    //Checking cliff profile
-                    if (CliffCoast[0]==1) {
-                        CoastType[i]=0;
-                    }
-                    
-                    //Checking ocean profile; can be done separately only in this specific case
-                    if ((Ocean[2]==true) && (Ocean[3]==false) && (Ocean[4]==false)) {
-                        OceanCoastType[i]=1;
-                    }
-                    if ((Ocean[2]==false) && (Ocean[3]==true) && (Ocean[4]==false)) {
-                        OceanCoastType[i]=2;
-                    }
-                    if ((Ocean[2]==false) && (Ocean[3]==false) && (Ocean[4]==true)) {
-                        OceanCoastType[i]=3;
-                    }
-                    if ((Ocean[2]==true) && (Ocean[3]==true) && (Ocean[4]==false)) {
-                        OceanCoastType[i]=4;
-                    }
-                    if ((Ocean[2]==true) && (Ocean[3]==false) && (Ocean[4]==true)) {
-                        OceanCoastType[i]=5;
-                    }
-                    if ((Ocean[2]==false) && (Ocean[3]==true) && (Ocean[4]==true)) {
-                        OceanCoastType[i]=6;
-                    }
-                    if ((Ocean[2]==true) && (Ocean[3]==true) && (Ocean[4]==true)) {
-                        OceanCoastType[i]=7;
-                    }
-                    break;
-                }
-                
-                //Checking 110000 case
-                else if (Ramps[0]==1 && Ramps[1]==1 && Ramps[2]==0 && Ramps[3]==0 && Ramps[4]==0 && Ramps[5]==0) {
-                    RampType[i]=2;
-                    CoastType[i]=2;
-                    
-                    //Checking cliff profile
-                    if ((CliffCoast[0]+CliffCoast[1])==1) {
-                        CoastType[i]=1;
-                        if (CliffCoast[1]==0) {
-                            additionalCoastRotation=1;
-                            //Checking ocean profile
-                            if ((Ocean[3]==true) && (Ocean[4]==false)) {
-                                OceanCoastType[i]=1;
-                            }
-                            if ((Ocean[3]==false) && (Ocean[4]==true)) {
-                                OceanCoastType[i]=2;
-                            }
-                            if ((Ocean[3]==true) && (Ocean[4]==true)) {
-                                OceanCoastType[i]=4;
-                            }
-                        }
-                        else {
-                            //Checking ocean profile
-                            if ((Ocean[3]==true) && (Ocean[4]==false)) {
-                                OceanCoastType[i]=2;
-                            }
-                            if ((Ocean[3]==false) && (Ocean[4]==true)) {
-                                OceanCoastType[i]=3;
-                            }
-                            if ((Ocean[3]==true) && (Ocean[4]==true)) {
-                                OceanCoastType[i]=6;
-                            }
-                        }
-                    }
-                    else if ((CliffCoast[0]+CliffCoast[1])==2) {
-                        CoastType[i]=0;
-                        //Checking ocean profile
-                        if ((Ocean[3]==true) && (Ocean[4]==false)) {
-                            OceanCoastType[i]=2;
-                        }
-                        if ((Ocean[3]==false) && (Ocean[4]==true)) {
-                            OceanCoastType[i]=3;
-                        }
-                        if ((Ocean[3]==true) && (Ocean[4]==true)) {
-                            OceanCoastType[i]=6;
-                        }
-                    }
-                    else {
-                        //Checking ocean profile
-                        if ((Ocean[3]==true) && (Ocean[4]==false)) {
-                            OceanCoastType[i]=2;
-                        }
-                        if ((Ocean[3]==false) && (Ocean[4]==true)) {
-                            OceanCoastType[i]=3;
-                        }
-                        if ((Ocean[3]==true) && (Ocean[4]==true)) {
-                            OceanCoastType[i]=6;
-                        }
-                    }
-                    break;
-                }
-                
-                //Checking 101000 case
-                else if (Ramps[0]==1 && Ramps[1]==0 && Ramps[2]==1 && Ramps[3]==0 && Ramps[4]==0 && Ramps[5]==0) {
-                    RampType[i]=3;
-                    CoastType[i]=3;
-                    
-                    //Checking cliff profile
-                    if ((CliffCoast[0]+CliffCoast[2])==1) {
-                        CoastType[i]=1;
-                        if (CliffCoast[2]==0) {
-                            additionalCoastRotation=2;
-                            //Checking ocean profile
-                            if (Ocean[4]==true) {
-                                OceanCoastType[i]=1;
-                            }
-                        }
-                        else {
-                            //Checking ocean profile
-                            if (Ocean[4]==true) {
-                                OceanCoastType[i]=3;
-                            }
-                        }
-                    }
-                    else if ((CliffCoast[0]+CliffCoast[2])==2) {
-                        CoastType[i]=0;
-                        //Checking ocean profile
-                        if (Ocean[4]==true) {
-                            OceanCoastType[i]=3;
-                        }
-                    }
-                    else {
-                        //Checking ocean profile
-                        if (Ocean[4]==true) {
-                            OceanCoastType[i]=3;
-                        }
-                    }
-                    break;
-                }
-                
-                //Checking 100100 case
-                else if (Ramps[0]==1 && Ramps[1]==0 && Ramps[2]==0 && Ramps[3]==1 && Ramps[4]==0 && Ramps[5]==0) {
-                    RampType[i]=4;
-                    CoastType[i]=4;
-                    
-                    //Checking cliff profile; no possible ocean profile
-                    if ((CliffCoast[0]+CliffCoast[3])==1) {
-                        CoastType[i]=1;
-                        if (CliffCoast[3]==0) {
-                            additionalCoastRotation=3;
-                        }
-                    }
-                    else if ((CliffCoast[0]+CliffCoast[3])==2) {
-                        CoastType[i]=0;
-                    }
-                    break;
-                }
-                
-                //Checking 111000 case
-                else if (Ramps[0]==1 && Ramps[1]==1 && Ramps[2]==1 && Ramps[3]==0 && Ramps[4]==0 && Ramps[5]==0) {
-                    RampType[i]=5;
-                    CoastType[i]=5;
-                    
-                    //Checking cliff profile
-                    if ((CliffCoast[0]+CliffCoast[1]+CliffCoast[2])==1) {
-                        if (CliffCoast[0]==1) {
-                            CoastType[i]=2;
-                            additionalCoastRotation=1;
-                            //Checking ocean profile
-                            if (Ocean[4]==true) {
-                                OceanCoastType[i]=2;
-                            }
-                        }
-                        else if (CliffCoast[1]==1) {
-                            CoastType[i]=3;
-                            //Checking ocean profile
-                            if (Ocean[4]==true) {
-                                OceanCoastType[i]=3;
-                            }
-                        }
-                        else {
-                            CoastType[i]=2;
-                            //Checking ocean profile
-                            if (Ocean[4]==true) {
-                                OceanCoastType[i]=3;
-                            }
-                        }
-                    }
-                    else if ((CliffCoast[0]+CliffCoast[1]+CliffCoast[2])==2) {
-                        CoastType[i]=1;
-                        if (CliffCoast[1]==0) {
-                            additionalCoastRotation=1;
-                            //Checking ocean profile
-                            if (Ocean[4]==true) {
-                                OceanCoastType[i]=2;
-                            }
-                        }
-                        else if (CliffCoast[2]==0) {
-                            additionalCoastRotation=2;
-                            //Checking ocean profile
-                            if (Ocean[4]==true) {
-                                OceanCoastType[i]=1;
-                            }
-                        }
-                        else {
-                            //Checking ocean profile
-                            if (Ocean[4]==true) {
-                                OceanCoastType[i]=3;
-                            }
-                        }
-                    }
-                    else if ((CliffCoast[0]+CliffCoast[1]+CliffCoast[2])==3) {
-                        CoastType[i]=0;
-                        //Checking ocean profile
-                        if (Ocean[4]==true) {
-                            OceanCoastType[i]=3;
-                        }
-                    }
-                    else {
-                        //Checking ocean profile
-                        if (Ocean[4]==true) {
-                            OceanCoastType[i]=3;
-                        }
-                    }
-                    break;
-                }
-                
-                //Checking 110100 case
-                else if (Ramps[0]==1 && Ramps[1]==1 && Ramps[2]==0 && Ramps[3]==1 && Ramps[4]==0 && Ramps[5]==0) {
-                    RampType[i]=6;
-                    CoastType[i]=6;
-                    
-                    //Checking cliff profile; no possible ocean profile
-                    if ((CliffCoast[0]+CliffCoast[1]+CliffCoast[3])==1) {
-                        if (CliffCoast[0]==1) {
-                            CoastType[i]=3;
-                            additionalCoastRotation=1;
-                        }
-                        else if (CliffCoast[1]==1) {
-                            CoastType[i]=4;
-                        }
-                        else {
-                            CoastType[i]=2;
-                        }
-                    }
-                    else if ((CliffCoast[0]+CliffCoast[1]+CliffCoast[3])==2) {
-                        CoastType[i]=1;
-                        if (CliffCoast[1]==0) {
-                            additionalCoastRotation=1;
-                        }
-                        else if (CliffCoast[3]==0) {
-                            additionalCoastRotation=3;
-                        }
-                    }
-                    else if ((CliffCoast[0]+CliffCoast[1]+CliffCoast[3])==3) {
-                        CoastType[i]=0;
-                    }
-                    break;
-                }
-                
-                //Checking 110010 case
-                else if (Ramps[0]==1 && Ramps[1]==1 && Ramps[2]==0 && Ramps[3]==0 && Ramps[4]==1 && Ramps[5]==0) {
-                    RampType[i]=7;
-                    CoastType[i]=7;
-                    
-                    //Checking cliff profile; no possible ocean profile
-                    if ((CliffCoast[0]+CliffCoast[1]+CliffCoast[4])==1) {
-                        if (CliffCoast[0]==1) {
-                            CoastType[i]=4;
-                            additionalCoastRotation=1;
-                        }
-                        else if (CliffCoast[1]==1) {
-                            CoastType[i]=3;
-                            additionalCoastRotation=4;
-                        }
-                        else {
-                            CoastType[i]=2;
-                        }
-                    }
-                    else if ((CliffCoast[0]+CliffCoast[1]+CliffCoast[4])==2) {
-                        CoastType[i]=1;
-                        if (CliffCoast[1]==0) {
-                            additionalCoastRotation=1;
-                        }
-                        else if (CliffCoast[4]==0) {
-                            additionalCoastRotation=4;
-                        }
-                    }
-                    else if ((CliffCoast[0]+CliffCoast[1]+CliffCoast[4])==3) {
-                        CoastType[i]=0;
-                    }
-                    break;
-                }
-                
-                //Checking 101010 case
-                else if (Ramps[0]==1 && Ramps[1]==0 && Ramps[2]==1 && Ramps[3]==0 && Ramps[4]==1 && Ramps[5]==0) {
-                    RampType[i]=8;
-                    CoastType[i]=8;
-                    
-                    //Checking cliff profile; no possible ocean profile
-                    if ((CliffCoast[0]+CliffCoast[2]+CliffCoast[4])==1) {
-                        CoastType[i]=3;
-                        if (CliffCoast[0]==1) {
-                            additionalCoastRotation=2;
-                        }
-                        else if (CliffCoast[2]==1) {
-                            additionalCoastRotation=4;
-                        }
-                    }
-                    else if ((CliffCoast[0]+CliffCoast[2]+CliffCoast[4])==2) {
-                        CoastType[i]=1;
-                        if (CliffCoast[2]==0) {
-                            additionalCoastRotation=2;
-                        }
-                        else if (CliffCoast[4]==0) {
-                            additionalCoastRotation=4;
-                        }
-                    }
-                    else if ((CliffCoast[0]+CliffCoast[2]+CliffCoast[4])==3) {
-                        CoastType[i]=0;
-                    }
-                    break;
-                }
-                
-                //Checking 111100 case
-                else if (Ramps[0]==1 && Ramps[1]==1 && Ramps[2]==1 && Ramps[3]==1 && Ramps[4]==0 && Ramps[5]==0) {
-                    RampType[i]=9;
-                    CoastType[i]=9;
-                    
-                    //Checking cliff profile; no possible ocean profile
-                    if ((CliffCoast[0]+CliffCoast[1]+CliffCoast[2]+CliffCoast[3])==1) {
-                        if (CliffCoast[0]==1) {
-                            CoastType[i]=5;
-                            additionalCoastRotation=1;
-                        }
-                        else if (CliffCoast[1]==1) {
-                            CoastType[i]=7;
-                            additionalCoastRotation=2;
-                        }
-                        else if (CliffCoast[2]==1) {
-                            CoastType[i]=6;
-                        }
-                        else {
-                            CoastType[i]=5;
-                        }
-                    }
-                    else if ((CliffCoast[0]+CliffCoast[1]+CliffCoast[2]+CliffCoast[3])==2) {
-                        if (CliffCoast[0]==0) {
-                            if (CliffCoast[1]==0) {
-                                CoastType[i]=2;
-                            }
-                            else if (CliffCoast[2]==0) {
-                                CoastType[i]=3;
-                            }
-                            else {
-                                CoastType[i]=4;
-                            }
-                        }
-                        else if (CliffCoast[1]==0) {
-                            additionalCoastRotation=1;
-                            if (CliffCoast[2]==0) {
-                                CoastType[i]=2;
-                            }
-                            else {
-                                CoastType[i]=3;
-                            }
-                        }
-                        else {
-                            CoastType[i]=2;
-                            additionalCoastRotation=2;
-                        }
-                    }
-                    else if ((CliffCoast[0]+CliffCoast[1]+CliffCoast[2]+CliffCoast[3])==3) {
-                        CoastType[i]=1;
-                        if (CliffCoast[1]==0) {
-                            additionalCoastRotation=1;
-                        }
-                        else if (CliffCoast[2]==0) {
-                            additionalCoastRotation=2;
-                        }
-                        else if (CliffCoast[3]==0) {
-                            additionalCoastRotation=3;
-                        }
-                    }
-                    else if ((CliffCoast[0]+CliffCoast[1]+CliffCoast[2]+CliffCoast[3])==4) {
-                        CoastType[i]=0;
-                    }
-                    break;
-                }
-                
-                //Checking 111010 case
-                else if (Ramps[0]==1 && Ramps[1]==1 && Ramps[2]==1 && Ramps[3]==0 && Ramps[4]==1 && Ramps[5]==0) {
-                    RampType[i]=10;
-                    CoastType[i]=10;
-                    
-                    //Checking cliff profile; no possible ocean profile
-                    if ((CliffCoast[0]+CliffCoast[1]+CliffCoast[2]+CliffCoast[4])==1) {
-                        if (CliffCoast[0]==1) {
-                            CoastType[i]=6;
-                            additionalCoastRotation=1;
-                        }
-                        else if (CliffCoast[1]==1) {
-                            CoastType[i]=8;
-                        }
-                        else if (CliffCoast[2]==1) {
-                            CoastType[i]=7;
-                        }
-                        else {
-                            CoastType[i]=5;
-                        }
-                    }
-                    else if ((CliffCoast[0]+CliffCoast[1]+CliffCoast[2]+CliffCoast[4])==2) {
-                        if (CliffCoast[0]==0) {
-                            if (CliffCoast[1]==0) {
-                                CoastType[i]=2;
-                            }
-                            else if (CliffCoast[2]==0) {
-                                CoastType[i]=3;
-                            }
-                            else {
-                                CoastType[i]=3;
-                                additionalCoastRotation=4;
-                            }
-                        }
-                        else if (CliffCoast[1]==0) {
-                            additionalCoastRotation=1;
-                            if (CliffCoast[2]==0) {
-                                CoastType[i]=2;
-                            }
-                            else {
-                                CoastType[i]=4;
-                            }
-                        }
-                        else {
-                            CoastType[i]=3;
-                            additionalCoastRotation=2;
-                        }
-                    }
-                    else if ((CliffCoast[0]+CliffCoast[1]+CliffCoast[2]+CliffCoast[4])==3) {
-                        CoastType[i]=1;
-                        if (CliffCoast[1]==0) {
-                            additionalCoastRotation=1;
-                        }
-                        else if (CliffCoast[2]==0) {
-                            additionalCoastRotation=2;
-                        }
-                        else if (CliffCoast[4]==0) {
-                            additionalCoastRotation=4;
-                        }
-                    }
-                    else if ((CliffCoast[0]+CliffCoast[1]+CliffCoast[2]+CliffCoast[4])==4) {
-                        CoastType[i]=0;
-                    }
-                    break;
-                }
-                
-                //Checking 110110 case
-                else if (Ramps[0]==1 && Ramps[1]==1 && Ramps[2]==0 && Ramps[3]==1 && Ramps[4]==1 && Ramps[5]==0) {
-                    RampType[i]=11;
-                    CoastType[i]=11;
-                    
-                    //Checking cliff profile; no possible ocean profile
-                    if ((CliffCoast[0]+CliffCoast[1]+CliffCoast[3]+CliffCoast[4])==1) {
-                        if (CliffCoast[0]==1) {
-                            CoastType[i]=7;
-                            additionalCoastRotation=3;
-                        }
-                        else if (CliffCoast[1]==1) {
-                            CoastType[i]=6;
-                            additionalCoastRotation=3;
-                        }
-                        else if (CliffCoast[3]==1) {
-                            CoastType[i]=7;
-                        }
-                        else {
-                            CoastType[i]=6;
-                        }
-                    }
-                    else if ((CliffCoast[0]+CliffCoast[1]+CliffCoast[3]+CliffCoast[4])==2) {
-                        if (CliffCoast[0]==0) {
-                            if (CliffCoast[1]==0) {
-                                CoastType[i]=2;
-                            }
-                            else if (CliffCoast[3]==0) {
-                                CoastType[i]=4;
-                            }
-                            else {
-                                CoastType[i]=3;
-                                additionalCoastRotation=4;
-                            }
-                        }
-                        else if (CliffCoast[1]==0) {
-                            additionalCoastRotation=1;
-                            if (CliffCoast[3]==0) {
-                                CoastType[i]=3;
-                            }
-                            else {
-                                CoastType[i]=4;
-                            }
-                        }
-                        else {
-                            CoastType[i]=2;
-                            additionalCoastRotation=3;
-                        }
-                    }
-                    else if ((CliffCoast[0]+CliffCoast[1]+CliffCoast[3]+CliffCoast[4])==3) {
-                        CoastType[i]=1;
-                        if (CliffCoast[1]==0) {
-                            additionalCoastRotation=1;
-                        }
-                        else if (CliffCoast[3]==0) {
-                            additionalCoastRotation=3;
-                        }
-                        else if (CliffCoast[4]==0) {
-                            additionalCoastRotation=4;
-                        }
-                    }
-                    else if ((CliffCoast[0]+CliffCoast[1]+CliffCoast[3]+CliffCoast[4])==4) {
-                        CoastType[i]=0;
-                    }
-                    break;
-                }
-                
-                //Checking 111110 case
-                else if (Ramps[0]==1 && Ramps[1]==1 && Ramps[2]==1 && Ramps[3]==1 && Ramps[4]==1 && Ramps[5]==0) {
-                    RampType[i]=12;
-                    CoastType[i]=12;
-                    
-                    //Checking cliff profile; no possible ocean profile
-                    if ((CliffCoast[0]+CliffCoast[1]+CliffCoast[2]+CliffCoast[3]+CliffCoast[4])==1) {
-                        if (CliffCoast[0]==1) {
-                            CoastType[i]=9;
-                            additionalCoastRotation=1;
-                        }
-                        else if (CliffCoast[1]==1) {
-                            CoastType[i]=10;
-                            additionalCoastRotation=2;
-                        }
-                        else if (CliffCoast[2]==1) {
-                            CoastType[i]=11;
-                        }
-                        else if (CliffCoast[3]==1) {
-                            CoastType[i]=10;
-                        }
-                        else {
-                            CoastType[i]=9;
-                        }
-                    }
-                    else if ((CliffCoast[0]+CliffCoast[1]+CliffCoast[2]+CliffCoast[3]+CliffCoast[4])==2) {
-                        if (CliffCoast[0]==1) {
-                            if (CliffCoast[1]==1) {
-                                CoastType[i]=5;
-                                additionalCoastRotation=2;
-                            }
-                            else if (CliffCoast[2]==1) {
-                                CoastType[i]=7;
-                                additionalCoastRotation=3;
-                            }
-                            else if (CliffCoast[3]==1) {
-                                CoastType[i]=6;
-                                additionalCoastRotation=1;
-                            }
-                            else {
-                                CoastType[i]=5;
-                                additionalCoastRotation=1;
-                            }
-                        }
-                        else if (CliffCoast[1]==1) {
-                            if (CliffCoast[2]==1) {
-                                CoastType[i]=6;
-                                additionalCoastRotation=3;
-                            }
-                            else if (CliffCoast[3]==1) {
-                                CoastType[i]=8;
-                            }
-                            else {
-                                CoastType[i]=7;
-                                additionalCoastRotation=2;
-                            }
-                        }
-                        else if (CliffCoast[2]==1) {
-                            if (CliffCoast[3]==1) {
-                                CoastType[i]=7;
-                            }
-                            else {
-                                CoastType[i]=6;
-                            }
-                        }
-                        else {
-                            CoastType[i]=5;
-                        }
-                    }
-                    else if ((CliffCoast[0]+CliffCoast[1]+CliffCoast[2]+CliffCoast[3]+CliffCoast[4])==3) {
-                        if (CliffCoast[0]==0) {
-                            if (CliffCoast[1]==0) {
-                                CoastType[i]=2;
-                            }
-                            else if (CliffCoast[2]==0) {
-                                CoastType[i]=3;
-                            }
-                            else if (CliffCoast[3]==0) {
-                                CoastType[i]=4;
-                            }
-                            else {
-                                CoastType[i]=3;
-                                additionalCoastRotation=4;
-                            }
-                        }
-                        else if (CliffCoast[1]==0) {
-                            additionalCoastRotation=1;
-                            if (CliffCoast[2]==0) {
-                                CoastType[i]=2;
-                            }
-                            else if (CliffCoast[3]==0) {
-                                CoastType[i]=3;
-                            }
-                            else {
-                                CoastType[i]=4;
-                            }
-                        }
-                        else if (CliffCoast[2]==0) {
-                            additionalCoastRotation=2;
-                            if (CliffCoast[3]==0) {
-                                CoastType[i]=2;
-                            }
-                            else {
-                                CoastType[i]=3;
-                            }
-                        }
-                        else {
-                            CoastType[i]=2;
-                            additionalCoastRotation=3;
-                        }
-                    }
-                    else if ((CliffCoast[0]+CliffCoast[1]+CliffCoast[2]+CliffCoast[3]+CliffCoast[4])==4) {
-                        CoastType[i]=1;
-                        if (CliffCoast[1]==0) {
-                            additionalCoastRotation=1;
-                        }
-                        else if (CliffCoast[2]==0) {
-                            additionalCoastRotation=2;
-                        }
-                        else if (CliffCoast[3]==0) {
-                            additionalCoastRotation=3;
-                        }
-                        else if (CliffCoast[4]==0) {
-                            additionalCoastRotation=4;
-                        }
-                    }
-                    else if ((CliffCoast[0]+CliffCoast[1]+CliffCoast[2]+CliffCoast[3]+CliffCoast[4])==5) {
-                        CoastType[i]=0;
-                    }
-                    break;
-                }
-                
-                //No match with previous cases, so we rotate by 60 degrees and increase currentRotation by 1
-                else {
-                    temp = Ramps[0];
-                    Ramps[0] = Ramps[1];
-                    Ramps[1] = Ramps[2];
-                    Ramps[2] = Ramps[3];
-                    Ramps[3] = Ramps[4];
-                    Ramps[4] = Ramps[5];
-                    Ramps[5] = temp;
-                    temp = CliffCoast[0];
-                    CliffCoast[0] = CliffCoast[1];
-                    CliffCoast[1] = CliffCoast[2];
-                    CliffCoast[2] = CliffCoast[3];
-                    CliffCoast[3] = CliffCoast[4];
-                    CliffCoast[4] = CliffCoast[5];
-                    CliffCoast[5] = temp;
-                    bool tempb;
-                    tempb = Ocean[0];
-                    Ocean[0] = Ocean[1];
-                    Ocean[1] = Ocean[2];
-                    Ocean[2] = Ocean[3];
-                    Ocean[3] = Ocean[4];
-                    Ocean[4] = Ocean[5];
-                    Ocean[5] = tempb;
-                    currentRotation++;
-                }
-            }
-        }
-        RampRotation[i]=currentRotation;
-        CoastRotation[i]=currentRotation+additionalCoastRotation;
     }
 }
 
 //Reduces altitude of all non-water terrain by 1 so that the lowest land level is at the same level as water; also reduces altitude of all rivers
 void AC_MapGenerator::ReduceLandAltitude()
 {
-    int32 mapsize = mapsizex*mapsizey;
+    int32 mapsize = hex_links.Num();
     for (int32 i=0; i<mapsize; i++) {
         if ((TerrainType[i]!=ETerrain::VE_Coast) && (TerrainType[i]!=ETerrain::VE_Ocean) && (TerrainType[i]!=ETerrain::VE_Lake)) {
             AltitudeMap[i]--;
@@ -2144,9 +1030,9 @@ void AC_MapGenerator::ReduceLandAltitude()
 
 //Places forests on land tiles
 void AC_MapGenerator::PlaceForests() {
-    int32 mapsize = mapsizex*mapsizey;
+    int32 mapsize = hex_links.Num();
     int32 landsize = LandTiles.Num();
-    Forests.SetNumZeroed(mapsizex*mapsizey);
+    Forests.SetNumZeroed(hex_links.Num());
     for (int32 i=0; i<landsize; i++) {
         int32 latitude = getApparentLatitude(LandTiles[i]);
         if ((randomstream.RandRange(0, latitude*latitude)) < (latitude + 4)) {
@@ -2160,11 +1046,11 @@ void AC_MapGenerator::PlaceForests() {
 //Places resources on tiles; needs to be placed after ReduceLandAltitude.
 void AC_MapGenerator::PlaceResources() {
     TArray<int32> LandResourceSpots, WaterResourceSpots;
-    resources.SetNum(mapsizex*mapsizey);
-    resourceRotations.SetNum(mapsizex*mapsizey);
+    resources.SetNum(hex_links.Num());
+    resourceRotations.SetNum(hex_links.Num());
     
     //Initialize resources to none
-    for (int32 i=0; i<(mapsizex*mapsizey); i++) {
+    for (int32 i=0; i<(hex_links.Num()); i++) {
         resources[i]=EResource::VE_None;
     }
     
@@ -2185,16 +1071,14 @@ void AC_MapGenerator::PlaceResources() {
     
     //Place land resources according to the characteristics or the tile
     for (int32 i=0; i<LandResourceSpots.Num(); i++) {
-        int32 x = getX(LandResourceSpots[i]);
-        int32 y = getY(LandResourceSpots[i]);
         int32 randres;
         
         //QUARRIES
         if (AltitudeMap[LandResourceSpots[i]] == 0) {//Checking for quarry resource spots (bottom of a cliff)
             bool legitQuarrySpot=false;
             for (int32 j=1; j<7; j++) {
-                int32 current = getNeighbor(x, y, j);
-                if (current != -1) {
+                int32 current = getNeighbor(LandResourceSpots[i], j);
+                if (current > -1) {
                     if (AltitudeMap[current] == 2) {
                         switch (j) {
                             case 1:
@@ -2289,7 +1173,7 @@ void AC_MapGenerator::PlaceResources() {
                 bool rotationFound = false;
                 while (!rotationFound) {
                     randres=randomstream.RandRange(1, 6);
-                    int32 current = getNeighbor(x, y, randres);
+                    int32 current = getNeighbor(LandResourceSpots[i], randres);
                     if (current != -1) {
                         if (AltitudeMap[current] == 2) {
                             switch (randres) {
@@ -2344,7 +1228,7 @@ void AC_MapGenerator::PlaceResources() {
         else if (AltitudeMap[LandResourceSpots[i]] == 2){ //Flat quarry spots on plateaus
             bool legitFlatQuarrySpot=true;
             for (int32 j=1; j<7; j++) {
-                int32 current = getNeighbor(x, y, j);
+                int32 current = getNeighbor(LandResourceSpots[i], j);
                 if (current != -1) {
                     if (AltitudeMap[current] != AltitudeMap[LandResourceSpots[i]]) {
                         legitFlatQuarrySpot=false;
@@ -2486,8 +1370,8 @@ void AC_MapGenerator::PlaceResources() {
 }
 
 void AC_MapGenerator::PlaceImprovements() {
-    improvements.SetNum(mapsizex*mapsizey);
-    for (int32 i=0; i<(mapsizex*mapsizey); i++) {
+    improvements.SetNum(hex_links.Num());
+    for (int32 i=0; i<hex_links.Num(); i++) {
         improvements[i]=EImprovement::VE_None;
     }
 }
@@ -2503,9 +1387,7 @@ void AC_MapGenerator::GetStartingSpots() {
 
 void AC_MapGenerator::InitializeGameManager() {
     
-    /*manager->mapsizex=mapsizex;
-    manager->mapsizey=mapsizey;
-    
+    /*
     manager->AltitudeMap=TArray<int32>(AltitudeMap);
     manager->TerrainType=TArray<ETerrain>(TerrainType);
 
@@ -2520,7 +1402,7 @@ void AC_MapGenerator::InitializeGameManager() {
     manager->Resources=TArray<EResource>(resources);
     manager->Improvements=TArray<EImprovement>(improvements);
     
-    int32 mapsize = mapsizex*mapsizey;
+    int32 mapsize = hex_links.Num();
     initialCityDistricts.SetNum(mapsize);
     for (int32 i=0; i<mapsize; i++) {
         initialCityDistricts[i]=-1;
@@ -2581,7 +1463,7 @@ float AC_MapGenerator::GenerateGoldbergPolyhedron(int numDivs, float radiusScali
     
     //initialize links for pents
     for (int i=0; i<12; i++) {
-        pent_links.Push(FGoldbergLink(i));
+        pent_links.Push(FGoldbergLink());
     }
     
     //Interpolate all points within a face
@@ -2865,7 +1747,7 @@ float AC_MapGenerator::GenerateGoldbergPolyhedron(int numDivs, float radiusScali
                 }
                 if (GEngine)
                 {
-                    GEngine->AddOnScreenDebugMessage(-1, 145.f, FColor::Yellow, FString::Printf(TEXT("Links on face %d: %d %d %d %d %d %d"), i, hex_links[j].links[0], hex_links[j].links[1], temp2, temp3, temp4, temp5));
+                    //GEngine->AddOnScreenDebugMessage(-1, 145.f, FColor::Yellow, FString::Printf(TEXT("Links on face %d: %d %d %d %d %d %d"), i, hex_links[j].links[0], hex_links[j].links[1], temp2, temp3, temp4, temp5));
                 }
             }
         }
@@ -2884,7 +1766,7 @@ float AC_MapGenerator::GenerateGoldbergPolyhedron(int numDivs, float radiusScali
         nLinks+=hex_links[i].links.Num();
     }
     if (GEngine) {
-            GEngine->AddOnScreenDebugMessage(-1, 145.f, FColor::Yellow, FString::Printf(TEXT("Number of hex links : %d"), nLinks));
+            GEngine->AddOnScreenDebugMessage(-1, 155.f, FColor::Yellow, FString::Printf(TEXT("Number of hex links : %d"), nLinks));
     }
     
     //Checking if all hexagons have 6 neighbors
@@ -3001,14 +1883,14 @@ void AC_MapGenerator::OrderGoldbergLinking() {
     
     for (int i=0; i<33; i++) {
         if (GEngine) {
-            GEngine->AddOnScreenDebugMessage(-1, 150.f, FColor::Yellow, FString::Printf(TEXT("Check on link ordering on hex %d : %d %d %d %d %d %d"), i, hex_links[i].links[0], hex_links[i].links[1], hex_links[i].links[2], hex_links[i].links[3], hex_links[i].links[4], hex_links[i].links[5]));
+            //GEngine->AddOnScreenDebugMessage(-1, 15.f, FColor::Yellow, FString::Printf(TEXT("Check on link ordering on hex %d : %d %d %d %d %d %d"), i, hex_links[i].links[0], hex_links[i].links[1], hex_links[i].links[2], hex_links[i].links[3], hex_links[i].links[4], hex_links[i].links[5]));
             
         }
     }
     
     for (int i=0; i<12; i++) {
         if (GEngine) {
-            GEngine->AddOnScreenDebugMessage(-1, 150.f, FColor::Yellow, FString::Printf(TEXT("Check on link ordering on pent %d : %d %d %d %d %d"), i, pent_links[i].links[0], pent_links[i].links[1], pent_links[i].links[2], pent_links[i].links[3], pent_links[i].links[4]));
+            //GEngine->AddOnScreenDebugMessage(-1, 15.f, FColor::Yellow, FString::Printf(TEXT("Check on link ordering on pent %d : %d %d %d %d %d"), i, pent_links[i].links[0], pent_links[i].links[1], pent_links[i].links[2], pent_links[i].links[3], pent_links[i].links[4]));
             
         }
     }

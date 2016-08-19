@@ -40,16 +40,6 @@ struct RiverSegment {
     }
 };
 
-struct point3 {
-    float x,y,z;//cartesian coordinates
-    
-    point3(float ix, float iy, float iz)
-        :   x(ix)
-        ,   y(iy)
-        ,   z(iz)
-    {   }
-};
-
 struct GoldbergFace {
     float c1x, c1y, c1z, c2x, c2y, c2z, c3x, c3y, c3z;//corners of a triangular face
     int c1,c2,c3;//ref index of each corner
@@ -77,23 +67,7 @@ struct FGoldbergLink {
     UPROPERTY(EditAnywhere, BlueprintReadWrite)
     TArray<int32> links;
     
-    UPROPERTY(EditAnywhere, BlueprintReadWrite)
-    int32 identifier;
-    
-    FGoldbergLink() {
-        identifier=0;
-    }
-    
-    FGoldbergLink(int32 iid)
-        :   identifier(iid)
-    {   }
-    
-    bool isInLinks(int32 a) {
-        for (int i=0; i<links.Num(); i++) {
-            if (links[i] == a) return true;
-        }
-        return false;
-    }
+    FGoldbergLink() {    }
 };
 
 UCLASS()
@@ -164,47 +138,6 @@ public:
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Map Info")
     TArray<int32> RiverOn6;//botright
     
-    /*Types are : 
-      0=000000
-      1=100000
-      2=110000
-      3=101000
-      4=100100
-      5=111000
-      6=110100
-      7=110010
-      8=101010
-      9=111100
-     10=111010
-     11=110110
-     12=111110
-     13=111111
-     Used for ramps AND coast types.
-     */
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Spawn Info")
-    TArray<int32> RampType;
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Spawn Info")
-    TArray<int32> CoastType;
-    /*Types are :
-     0=000000
-     1=001000
-     2=000100
-     3=000010
-     4=001100
-     5=001010
-     6=000110
-     7=001110
-     Used for ocean coast types ONLY.
-     */
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Spawn Info")
-    TArray<int32> OceanCoastType;
-    
-    //Possible rotations : 0,1,2,3,4,5. All rotations are positive multiples of 60 degree rotations. Used for ramps AND coast types.
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Spawn Info")
-    TArray<int32> RampRotation;
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Spawn Info")
-    TArray<int32> CoastRotation;
-    
     //Map features
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Map Info")
     TArray<int32> Forests;
@@ -266,8 +199,6 @@ public:
     UFUNCTION(BluePrintCallable, Category="Map Generation Functions")
     void GenerateDeserts();
     UFUNCTION(BluePrintCallable, Category="Map Generation Functions")
-    void GetHexTypesAndRotations();
-    UFUNCTION(BluePrintCallable, Category="Map Generation Functions")
     void ReduceLandAltitude();
     UFUNCTION(BluePrintCallable, Category="Map Generation Functions")
     void PlaceForests();
@@ -304,15 +235,10 @@ public:
     
     
     //Internal and access functions
-    
-    int32 getX(int32 i);
-    int32 getY(int32 i);
-    
+        
     UFUNCTION(BluePrintCallable, Category="Access Functions")
     int32 getNeighbor(int32 index, int32 dir);
-    
-    int32 getNeighbor(int32 x, int32 y, int32 dir);
-    
+        
     bool CheckIfLake(int32 start, WaterBody *lake);
     int32 CheckIfLakeTile(int32 i);
     bool CheckIfOcean(int32 i);
@@ -323,10 +249,10 @@ public:
     bool CheckIfEligibleRiverStart(int32 i, int32 dir);
     bool CheckIfEligibleRiverLakeStart(int32 i, int32 dir, int32 lake);
     bool CheckIfTileIsNextToWater(int32 index);
-    int32 getApparentLatitude(int32 index);
-    int32 getLatitude(int32 index);
-    int32 getSnowWeight(int32 latitude);
-    int32 getTundraWeight(int32 latitude);
-    int32 getPlainWeight(int32 latitude);
-    int32 getGrassWeight(int32 latitude);
+    float getApparentLatitude(int32 index);
+    float getLatitude(int32 index);
+    float getSnowWeight(float latitude);
+    float getTundraWeight(float latitude);
+    float getPlainWeight(float latitude);
+    float getGrassWeight(float latitude);
 };
