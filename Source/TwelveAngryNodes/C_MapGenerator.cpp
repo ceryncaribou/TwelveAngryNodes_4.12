@@ -1854,6 +1854,37 @@ void AC_MapGenerator::OrderGoldbergLinking() {
                 if (foundNext) break;
             }
         }
+        
+        //Check if ordering is anti-clockwise
+        FVector pos, vec1, vec2, cross;
+        float dot;
+        pos = FVector(xhex[i], yhex[i], zhex[i]);
+        if (hex_links[i].links[0] >= 0) {
+            vec1 = FVector(xhex[hex_links[i].links[0]]-xhex[i], yhex[hex_links[i].links[0]]-yhex[i], zhex[hex_links[i].links[0]]-zhex[i]);
+
+        }
+        else {
+            vec1 = FVector(xpent[-hex_links[i].links[0]-1]-xhex[i], ypent[-hex_links[i].links[0]-1]-yhex[i], zpent[-hex_links[i].links[0]-1]-zhex[i]);
+        }
+        if (hex_links[i].links[1] >= 0) {
+            vec2 = FVector(xhex[hex_links[i].links[1]]-xhex[i], yhex[hex_links[i].links[1]]-yhex[i], zhex[hex_links[i].links[1]]-zhex[i]);
+            
+        }
+        else {
+            vec2 = FVector(xpent[-hex_links[i].links[1]-1]-xhex[i], ypent[-hex_links[i].links[1]-1]-yhex[i], zpent[-hex_links[i].links[1]-1]-zhex[i]);
+        }
+        vec2 = FVector(xhex[hex_links[i].links[1]]-xhex[i], yhex[hex_links[i].links[1]]-yhex[i], zhex[hex_links[i].links[1]]-zhex[i]);
+        cross = FVector::CrossProduct(vec1, vec2);
+        dot = FVector::DotProduct(pos, cross);
+        //If the dot product of _positionVector_ with the cross product of _i_to_neigh1_ and _i_to_neigh2_ vectors is negative, then swap the ordering
+        if (dot > 0) {
+            int temp = hex_links[i].links[1];
+            hex_links[i].links[1] = hex_links[i].links[5];
+            hex_links[i].links[5] = temp;
+            temp = hex_links[i].links[2];
+            hex_links[i].links[2] = hex_links[i].links[4];
+            hex_links[i].links[4] = temp;
+        }
     }
     
     //For all pents, we order the neighbors; i.e. the neighbors next to each other in the array are next to each other on the sphere (first and last element are also neighbors)
@@ -1877,6 +1908,24 @@ void AC_MapGenerator::OrderGoldbergLinking() {
                 }
                 if (foundNext) break;
             }
+        }
+        
+        //Check if ordering is anti-clockwise
+        FVector pos, vec1, vec2, cross;
+        float dot;
+        pos = FVector(xpent[i], ypent[i], zpent[i]);
+        vec1 = FVector(xhex[pent_links[i].links[0]]-xpent[i], yhex[pent_links[i].links[0]]-ypent[i], zhex[pent_links[i].links[0]]-zpent[i]);
+        vec2 = FVector(xhex[pent_links[i].links[1]]-xpent[i], yhex[pent_links[i].links[1]]-ypent[i], zhex[pent_links[i].links[1]]-zpent[i]);
+        cross = FVector::CrossProduct(vec1, vec2);
+        dot = FVector::DotProduct(pos, cross);
+        //If the dot product of _positionVector_ with the cross product of _i_to_neigh1_ and _i_to_neigh2_ vectors is negative, then swap the ordering
+        if (dot > 0) {
+            int temp = pent_links[i].links[1];
+            pent_links[i].links[1] = pent_links[i].links[4];
+            pent_links[i].links[4] = temp;
+            temp = hex_links[i].links[2];
+            pent_links[i].links[2] = pent_links[i].links[3];
+            pent_links[i].links[3] = temp;
         }
     }
     
