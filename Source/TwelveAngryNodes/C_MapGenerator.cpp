@@ -293,7 +293,7 @@ bool AC_MapGenerator::CheckIfOcean(int32 i){
 
 //Computes an "apparent latitude" for climate based on latitude and elevation; max value of 4/3
 float AC_MapGenerator::getApparentLatitude(int32 index){
-    return fabsf(getLatitude(index)+(AltitudeMap[index]-1)/6);//If changing /6 factor, also need to change maxlatitude in weight functions just below
+    return fabsf(getLatitude(index)+(float) ((AltitudeMap[index]-1)/6));//If changing /6 factor, also need to change maxlatitude in weight functions just below
 }
 
 //Computes real latitude for climate: ratio of z position to radius
@@ -303,7 +303,7 @@ float AC_MapGenerator::getLatitude(int32 index){
 
 //Calculates a probability weight to get a snow tile
 float AC_MapGenerator::getSnowWeight(float latitude){
-    float maxlatitude=(float) 4/ (float) 3;
+    float maxlatitude=1;//(float) 4/ (float) 3;
     if (latitude>maxlatitude*3/4) {
         return 6*(latitude-maxlatitude*3/4);
     }
@@ -314,31 +314,33 @@ float AC_MapGenerator::getSnowWeight(float latitude){
 
 //Calculates a probability weight to get a tundra tile
 float AC_MapGenerator::getTundraWeight(float latitude){
-    float maxlatitude=(float) 4/ (float) 3;
-    if (latitude>maxlatitude/2) {
+    float maxlatitude=1;//(float) 4/ (float) 3;
+    if (latitude>maxlatitude*3/4) {
+        return maxlatitude-latitude;
+    }
+    else if (latitude>maxlatitude/2){
         return latitude-maxlatitude/2;
     }
-    else {
-        return 0;
-    }
+    else return 0;
 }
 
 //Calculates a probability weight to get a plain tile
 float AC_MapGenerator::getPlainWeight(float latitude){
-    float maxlatitude=(float) 4/ (float) 3;
+    float maxlatitude=1;//(float) 4/ (float) 3;
     if (latitude<=maxlatitude/2) {
-        return latitude;
+        return 2*latitude;
     }
-    else {
+    else if (latitude<=maxlatitude*3/4){
         return maxlatitude-latitude;
     }
+    else return 0;
 }
 
 //Calculates a probability weight to get a grassland tile
 float AC_MapGenerator::getGrassWeight(float latitude){
-    float maxlatitude=(float) 4/ (float) 3;
-    if (latitude<=maxlatitude*2/3) {
-        return 2*(maxlatitude*2/3-latitude);
+    float maxlatitude=1;//(float) 4/ (float) 3;
+    if (latitude<=maxlatitude/2) {
+        return 2*(maxlatitude/2-latitude);
     }
     else {
         return 0;
@@ -350,7 +352,7 @@ void AC_MapGenerator::GenerateTerrainType()
 {
     int32 mapsize = hex_links.Num();
     float latitude, applatitude, snowWeight, tundraWeight, plainWeight, grassWeight, totalWeight;
-    int32 weightedRandomFactor;
+    float weightedRandomFactor;
     
     TerrainType.SetNum(mapsize);
     
@@ -390,7 +392,7 @@ void AC_MapGenerator::GenerateTerrainType()
     
     for (int32 i=0; i<LandTiles.Num(); i++) {
         latitude=getLatitude(LandTiles[i]);
-        if (latitude > ((float) 5/(float) 6)) {
+        if (latitude > ((float) 9/(float) 10)) {
             TerrainType[LandTiles[i]]=ETerrain::VE_Snow;
         }
     }
