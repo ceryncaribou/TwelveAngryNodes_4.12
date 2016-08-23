@@ -61,6 +61,25 @@ int32 AC_MapGenerator::getNeighbor(int32 index, int32 dir)
     else return -13;
 }
 
+//Finds direction to go from "from" to "to"
+int32 AC_MapGenerator::findNeighborDir(int32 from, int32 to) {
+    if (from > -1) {
+        for (int i=0; i<6; i++) {
+            if (hex_links[from].links[i] == to) {
+                return i+1;
+            }
+        }
+    }
+    else if (from > -13){
+        for (int i=0; i<5; i++) {
+            if (hex_links[-from-1].links[i] == to) {
+                return i+1;
+            }
+        }
+    }
+    
+    return -1;//to is not a neighbor of from
+}
 
 //Generates an altitude map for the current instance, in the form of a 1D Array
 //Altitudes : 0=water, 1=lowlands, 2=midlands, 3=highlands
@@ -451,7 +470,7 @@ void AC_MapGenerator::BuildRivers(int32 numberOfRivers)
         }
         else {
             if (GEngine) {
-                GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Yellow, TEXT("no more river spots"));
+                GEngine->AddOnScreenDebugMessage(-1, 15.f, FColor::Yellow, TEXT("no more river spots"));
             }
         }
     }
@@ -488,34 +507,53 @@ void AC_MapGenerator::BuildRivers(int32 numberOfRivers)
             while (Rivers[i]->dir[j] < 1) {
                 Rivers[i]->dir[j]= Rivers[i]->dir[j] + 6;
             }
-            switch (Rivers[i]->dir[j]) {
+            switch (findNeighborDir(Rivers[i]->LeftBank[j], Rivers[i]->RightBank[j])) {
                 case 1:
                     RiverOn1[Rivers[i]->LeftBank[j]]=1;
-                    RiverOn4[Rivers[i]->RightBank[j]]=1;
                     break;
                 case 2:
                     RiverOn2[Rivers[i]->LeftBank[j]]=1;
-                    RiverOn5[Rivers[i]->RightBank[j]]=1;
                     break;
                 case 3:
                     RiverOn3[Rivers[i]->LeftBank[j]]=1;
-                    RiverOn6[Rivers[i]->RightBank[j]]=1;
                     break;
                 case 4:
                     RiverOn4[Rivers[i]->LeftBank[j]]=1;
-                    RiverOn1[Rivers[i]->RightBank[j]]=1;
                     break;
                 case 5:
                     RiverOn5[Rivers[i]->LeftBank[j]]=1;
-                    RiverOn2[Rivers[i]->RightBank[j]]=1;
                     break;
                 case 6:
                     RiverOn6[Rivers[i]->LeftBank[j]]=1;
-                    RiverOn3[Rivers[i]->RightBank[j]]=1;
                     break;
                 default:
                     if (GEngine) {
-                        GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Yellow, TEXT("HELLO RIVERS"));
+                        GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Yellow, FString::Printf(TEXT("NOT A VALID DIRECTION ON BUILD RIVERONX ARRAYS; INDEX:%d"), findNeighborDir(Rivers[i]->LeftBank[j], Rivers[i]->RightBank[j])));
+                    }
+                    break;
+            }
+            switch (findNeighborDir(Rivers[i]->RightBank[j], Rivers[i]->LeftBank[j])) {
+                case 1:
+                    RiverOn1[Rivers[i]->RightBank[j]]=1;
+                    break;
+                case 2:
+                    RiverOn2[Rivers[i]->RightBank[j]]=1;
+                    break;
+                case 3:
+                    RiverOn3[Rivers[i]->RightBank[j]]=1;
+                    break;
+                case 4:
+                    RiverOn4[Rivers[i]->RightBank[j]]=1;
+                    break;
+                case 5:
+                    RiverOn5[Rivers[i]->RightBank[j]]=1;
+                    break;
+                case 6:
+                    RiverOn6[Rivers[i]->RightBank[j]]=1;
+                    break;
+                default:
+                    if (GEngine) {
+                        GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Yellow, FString::Printf(TEXT("NOT A VALID DIRECTION ON BUILD RIVERONX ARRAYS; INDEX:%d"), findNeighborDir(Rivers[i]->RightBank[j], Rivers[i]->LeftBank[j])));
                     }
                     break;
             }
@@ -549,8 +587,7 @@ bool AC_MapGenerator::CheckifAlreadyInRightBank(int32 i){
 //startDir is the first direction to go from left to right bank
 //initstate is the starting state of the segment : 0=ocean, 1=fork, 2=cascade (altitude change of 1), 3=waterfall (altitude change of 2), 4=lake
 //Everything is the same for endings, except 0=source
-bool AC_MapGenerator::BuildRiverSegment(int32 startLeft, int32 startRight, int32 startDir, int32 initstate, bool waterStart, int32 waterStartAltitude)
-{
+bool AC_MapGenerator::BuildRiverSegment(int32 startLeft, int32 startRight, int32 startDir, int32 initstate, bool waterStart, int32 waterStartAltitude) {
     RiverSegment *actualSeg = new RiverSegment(startLeft, startRight, startDir, initstate);
     if (AltitudeMap[startLeft]<=AltitudeMap[startRight]) {
         actualSeg->segAltitude=AltitudeMap[startLeft];
@@ -565,10 +602,11 @@ bool AC_MapGenerator::BuildRiverSegment(int32 startLeft, int32 startRight, int32
 
     
     bool anotherLoop=true;
-    while (anotherLoop) {
+    int count=0;
+    while (anotherLoop && (count < 3)) {
+        count++;
         int32 goingTowards=getNeighbor(actualSeg->LeftBank.Last(), actualSeg->dir.Last()+1);
-        if (goingTowards!=-1) {//REDUNDANCY CHECKS :D
-            
+        if (goingTowards>-1) {//REDUNDANCY CHECKS :D
             if ((CheckifAlreadyInLeftBank(goingTowards) && CheckifAlreadyInRightBank(startLeft)) ||
                 (CheckifAlreadyInRightBank(goingTowards) && CheckifAlreadyInLeftBank(startRight))) {
                 Rivers.RemoveAt(Rivers.Num()-1);
@@ -578,10 +616,12 @@ bool AC_MapGenerator::BuildRiverSegment(int32 startLeft, int32 startRight, int32
             int32 goingToLeft=getNeighbor(actualSeg->LeftBank.Last(), actualSeg->dir.Last()+2);
             int32 goingToRight=getNeighbor(actualSeg->RightBank.Last(), actualSeg->dir.Last()+1);
             int32 nextTurn=0;//1=right, 2=left, 3=random, 4=end, 5=hit a lake
+            
+            //Check what the next action should be
             if (CheckIfLakeTile(goingTowards) != -1) {
                 nextTurn=5;
             }
-            else if (goingToLeft == -1) {
+            else if (goingToLeft < 0) {
                 if ((((AltitudeMap[goingToRight]>=AltitudeMap[actualSeg->RightBank.Last()]) ||
                     (AltitudeMap[goingToRight]>=AltitudeMap[goingTowards])) &&
                     (!CheckifAlreadyInRightBank(goingToRight)) && (!CheckifAlreadyInRightBank(goingTowards))) ||
@@ -593,7 +633,7 @@ bool AC_MapGenerator::BuildRiverSegment(int32 startLeft, int32 startRight, int32
                     nextTurn=4;
                 }
             }
-            else if (goingToRight == -1) {
+            else if (goingToRight < 0) {
                 if ((((AltitudeMap[goingToLeft]>=AltitudeMap[actualSeg->LeftBank.Last()]) ||
                     (AltitudeMap[goingToLeft]>=AltitudeMap[goingTowards])) &&
                     (!CheckifAlreadyInLeftBank(goingToLeft)) && (!CheckifAlreadyInLeftBank(goingTowards))) ||
@@ -633,6 +673,8 @@ bool AC_MapGenerator::BuildRiverSegment(int32 startLeft, int32 startRight, int32
                     nextTurn=4;
                 }
             }
+            ///*
+            //Perform next action
             switch (nextTurn) {
                 case 1://Turning right
                     if ((AltitudeMap[actualSeg->RightBank.Last()] > actualSeg->segAltitude) &&
@@ -782,7 +824,7 @@ bool AC_MapGenerator::BuildRiverSegment(int32 startLeft, int32 startRight, int32
                                 }
                             }
                         }
-                    }*/
+                    }*///*
                     break;
                   
                 default:
@@ -797,6 +839,9 @@ bool AC_MapGenerator::BuildRiverSegment(int32 startLeft, int32 startRight, int32
                 }
             }
         }
+        else {
+            anotherLoop=false;
+        }
     }
     return true;
 }
@@ -805,7 +850,7 @@ bool AC_MapGenerator::BuildRiverSegment(int32 startLeft, int32 startRight, int32
 bool AC_MapGenerator::CheckIfEligibleRiverStart(int32 i, int32 dir)
 {
     if ((TerrainType[i]==ETerrain::VE_Coast) || (TerrainType[i]==ETerrain::VE_Ocean) || (TerrainType[i]==ETerrain::VE_Lake)) {
-        return false;//hex is water
+        return false;//hex is water; probably redundant
     }
     int32 topdir=dir+1;
     int32 botdir=dir-1;
@@ -814,7 +859,11 @@ bool AC_MapGenerator::CheckIfEligibleRiverStart(int32 i, int32 dir)
     int32 topcurrent=getNeighbor(i, topdir);
     int32 botcurrent=getNeighbor(i, botdir);
     
-    if ((current>-1) || (topcurrent>-1) || (botcurrent>-1)) {//This is probably redundant, but better be safe
+    if ((current<0) || (topcurrent<0) || (botcurrent<0)) {//This is probably redundant, but better be safe
+        if (GEngine) {
+            //GEngine->AddOnScreenDebugMessage(-1, 15.f, FColor::Yellow, FString::Printf(TEXT("invalid river spot: too near to node")));
+            
+        }
         return false;//near a node -> nope
     }
     
@@ -872,7 +921,7 @@ bool AC_MapGenerator::CheckIfEligibleRiverLakeStart(int32 i, int32 dir, int32 la
     int32 topcurrent=getNeighbor(i, topdir);
     int32 botcurrent=getNeighbor(i, botdir);
     
-    if ((current>-1) || (topcurrent>-1) || (botcurrent>-1)) {//This is probably redundant, but better be safe
+    if ((current<0) || (topcurrent<0) || (botcurrent<0)) {//This is probably redundant, but better be safe
         return false;//near a node -> nope
     }
 
@@ -964,7 +1013,7 @@ bool AC_MapGenerator::CheckIfTileIsNextToWater(int32 index)
 }
 
 //Generates deserts on the map
-//Uses TerrainType info and river positioning to place desert "seeds" far from water and not on snow, so needs to be placed after BuildRivers bet before SetTransitions
+//Uses TerrainType info and river positioning to place desert "seeds" far from water and not on snow, so needs to be placed after BuildRivers but before SetTransitions
 void AC_MapGenerator::GenerateDeserts()
 {
     TArray<int32> potentialSeeds;
@@ -1006,7 +1055,9 @@ void AC_MapGenerator::GenerateDeserts()
         
         for (int32 j=0; j<Chains[i]; j++) {
             if (ChainActual >= 0) {
-                if ((TerrainType[ChainActual] != ETerrain::VE_Coast) && (TerrainType[ChainActual] != ETerrain::VE_Snow)) { //If terrain is not water or snow, set to desert
+                if ((TerrainType[ChainActual] != ETerrain::VE_Ocean) && (TerrainType[ChainActual] != ETerrain::VE_Lake) &&
+                    (TerrainType[ChainActual] != ETerrain::VE_Coast) && (TerrainType[ChainActual] != ETerrain::VE_Snow)) {
+                    //If terrain is not water or snow, set to desert
                     TerrainType[ChainActual]=ETerrain::VE_Desert;
                 }
             }

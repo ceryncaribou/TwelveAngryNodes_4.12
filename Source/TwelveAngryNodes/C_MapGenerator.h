@@ -238,7 +238,9 @@ public:
         
     UFUNCTION(BluePrintCallable, Category="Access Functions")
     int32 getNeighbor(int32 index, int32 dir);
-        
+    
+    int32 findNeighborDir(int32 from, int32 to);
+    
     bool CheckIfLake(int32 start, WaterBody *lake);
     int32 CheckIfLakeTile(int32 i);
     bool CheckIfOcean(int32 i);
